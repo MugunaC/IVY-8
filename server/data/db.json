@@ -1,0 +1,2994 @@
+{
+  "users": [
+    {
+      "id": "admin-1",
+      "username": "admin",
+      "email": "admin@example.com",
+      "role": "admin",
+      "createdAt": "2026-02-21T14:08:56.417Z",
+      "passwordHash": "8a586e1ba83893f23c3c1f7d890d8530855f374d84efdb57e46e8ad1d0a0b6355bb092b9c452454b4358ac2cdfb1bd02215db47fbcc69f782ca14b25534bc886"
+    },
+    {
+      "id": "user-1",
+      "username": "user1",
+      "email": "user1@example.com",
+      "role": "user",
+      "createdAt": "2026-02-21T14:08:56.596Z",
+      "passwordHash": "e6738b25dd3df8e9fc85071aee4cdf5069d2a8542f87fbac993ba01c7a05bbfd29ff750ac80260427c36540197326a8427f3ee41bed9c8f5f6f96dcf4e77adfc"
+    },
+    {
+      "id": "user-2",
+      "username": "user2",
+      "email": "user2@example.com",
+      "role": "user",
+      "createdAt": "2026-02-21T14:08:56.829Z",
+      "passwordHash": "e6738b25dd3df8e9fc85071aee4cdf5069d2a8542f87fbac993ba01c7a05bbfd29ff750ac80260427c36540197326a8427f3ee41bed9c8f5f6f96dcf4e77adfc"
+    },
+    {
+      "id": "user-1771683424160",
+      "username": "Charlton",
+      "email": "charlton@example.com",
+      "role": "user",
+      "createdAt": "2026-02-21T14:17:04.160Z",
+      "passwordHash": "411166d21cd4d4347914b45a270aa2063d677d7f97d86d3cc94e43dfedf020de3f1a5908a9f6dc67f0329afc6d8e341207d2e7f0e72981e7889b17e4c80ed3d1"
+    },
+    {
+      "id": "user-1771683571983",
+      "username": "Muguna",
+      "email": "muguna@example.com",
+      "role": "user",
+      "createdAt": "2026-02-21T14:19:31.983Z",
+      "passwordHash": "5db0b3d6413f410745ddbf529d5a4edfde39b9aaecd3939ee8317e574bb3fa8a3dec3f035550ac1e61d5da7010172cacecf3a35744e94786a3c48fcfb0da9a3a"
+    },
+    {
+      "id": "user-1771685418445",
+      "username": "Gichunge",
+      "email": "silas@example.com",
+      "role": "user",
+      "createdAt": "2026-02-21T14:50:18.445Z",
+      "passwordHash": "2c5f887f1187b94277bb3c503cfe53df5f3f6c184806b5aaf150da9253208aa3a675177946694fb6c79dbe8a2d8562207957b0f3532f32b34564caa2bc8963c0"
+    },
+    {
+      "id": "user-1771703169655",
+      "username": "Sudo",
+      "email": "sudo@example.com",
+      "role": "admin",
+      "createdAt": "2026-02-21T19:46:09.655Z",
+      "passwordHash": "155bd04fd3eb7bcaf8b2a04bb8a6a83d052d2e6b9f1d017bd8ae38694818d8f206ff8621f547d444b6317de5f921860db72b39d57fc15bd2dfeb831d49bae613"
+    },
+    {
+      "id": "user-1772129124042",
+      "username": "Mart",
+      "email": "mshepherd193@gmail.com",
+      "role": "user",
+      "createdAt": "2026-02-26T18:05:24.042Z",
+      "passwordHash": "0239f59c3293fccdb42ccacdf21c51eb04f0922b2ab70bcdefd260744e33d7b245e89d9610bf61d61209697c08a3fad2a2820ceb861435fd59737ae67a937bc5"
+    },
+    {
+      "id": "user-1772129225629",
+      "username": "Marts",
+      "email": "martgaming69@gmail.com",
+      "role": "user",
+      "createdAt": "2026-02-26T18:07:05.629Z",
+      "passwordHash": "4c0b303969947abce1fcb10fb4336388a918a33432219e70da33cf5ff2a67107eb965adabdc3567af98fd4b89a1600a737d40af153c9918b15769c5de92011e4"
+    },
+    {
+      "id": "user-1772289056773",
+      "username": "Joachim",
+      "email": "joachim55muthomi@gmail.com",
+      "role": "user",
+      "createdAt": "2026-02-28T14:30:56.773Z",
+      "passwordHash": "128a54c8c74145d046a7ed735c98dd30524aaeeb4f0f630f41e96cf1d1041917782d405c3de3a0a79f24e28acbf4406f3eb0ab9836f8134f97f6da896f63722f"
+    }
+  ],
+  "vehicles": [
+    {
+      "id": "VH-001",
+      "model": "Tesla Model 3",
+      "status": "unavailable",
+      "condition": "Excellent",
+      "assignedUsers": [
+        "user-1771683424160"
+      ],
+      "location": "Garage A",
+      "charge": 85,
+      "currentUser": "Charlton",
+      "currentUserId": "user-1771683424160",
+      "capabilities": {
+        "vehicleClass": "rover",
+        "supportedModes": [
+          "manual",
+          "assisted",
+          "hold",
+          "guided",
+          "auto",
+          "rtl",
+          "dock"
+        ],
+        "supportedModules": [
+          "control",
+          "location",
+          "camera_control",
+          "camera_status",
+          "sensor_state"
+        ],
+        "actuatorMap": {
+          "steer": 0,
+          "throttle": 1,
+          "brake": 2
+        },
+        "sensorSet": [
+          "battery",
+          "imu",
+          "temperature",
+          "wheel_rpm",
+          "gps"
+        ],
+        "limits": {
+          "maxSteer": 1,
+          "maxThrottle": 1,
+          "maxBrake": 1
+        }
+      },
+      "controlLeaseId": "86d35fee-5f27-4c92-845e-2207d655d2d4",
+      "controlLeaseIssuedAt": "2026-03-20T09:52:49.329Z"
+    },
+    {
+      "id": "VH-002",
+      "model": "Toyota Prius",
+      "status": "unavailable",
+      "condition": "Good",
+      "assignedUsers": [
+        "user-1",
+        "user-1772129225629"
+      ],
+      "location": "Garage B",
+      "charge": 92,
+      "capabilities": {
+        "vehicleClass": "unknown",
+        "supportedModes": [
+          "manual",
+          "hold"
+        ],
+        "supportedModules": [
+          "control",
+          "location",
+          "sensor_state"
+        ],
+        "actuatorMap": {
+          "steer": 0,
+          "throttle": 1
+        },
+        "sensorSet": [
+          "battery"
+        ],
+        "limits": {
+          "maxSteer": 1,
+          "maxThrottle": 1,
+          "maxBrake": 1
+        }
+      },
+      "currentUser": "Marts",
+      "currentUserId": "user-1772129225629"
+    },
+    {
+      "id": "VH-003",
+      "model": "Honda Civic",
+      "status": "maintenance",
+      "condition": "Fair",
+      "assignedUsers": [],
+      "location": "Service Center",
+      "charge": 45,
+      "capabilities": {
+        "vehicleClass": "unknown",
+        "supportedModes": [
+          "manual",
+          "hold"
+        ],
+        "supportedModules": [
+          "control",
+          "location",
+          "sensor_state"
+        ],
+        "actuatorMap": {
+          "steer": 0,
+          "throttle": 1
+        },
+        "sensorSet": [
+          "battery"
+        ],
+        "limits": {
+          "maxSteer": 1,
+          "maxThrottle": 1,
+          "maxBrake": 1
+        }
+      }
+    },
+    {
+      "id": "VH-004",
+      "model": "F14 Tomcat",
+      "status": "unavailable",
+      "condition": "",
+      "assignedUsers": [
+        "user-1771683571983",
+        "user-1771683424160"
+      ],
+      "location": "",
+      "charge": 100,
+      "currentUser": "Muguna",
+      "currentUserId": "user-1771683571983",
+      "capabilities": {
+        "vehicleClass": "unknown",
+        "supportedModes": [
+          "manual",
+          "hold"
+        ],
+        "supportedModules": [
+          "control",
+          "location",
+          "sensor_state"
+        ],
+        "actuatorMap": {
+          "steer": 0,
+          "throttle": 1
+        },
+        "sensorSet": [
+          "battery"
+        ],
+        "limits": {
+          "maxSteer": 1,
+          "maxThrottle": 1,
+          "maxBrake": 1
+        }
+      },
+      "controlLeaseId": "e9cd58f3-3006-4ac9-a0b3-7b0413a835ac",
+      "controlLeaseIssuedAt": "2026-03-19T20:32:42.645Z"
+    },
+    {
+      "id": "VH-005",
+      "model": "F15 Eagle",
+      "status": "available",
+      "condition": "",
+      "assignedUsers": [
+        "user-1772129225629",
+        "user-1772289056773"
+      ],
+      "location": "USS Enterprise",
+      "charge": 82,
+      "capabilities": {
+        "vehicleClass": "unknown",
+        "supportedModes": [
+          "manual",
+          "hold"
+        ],
+        "supportedModules": [
+          "control",
+          "location",
+          "sensor_state"
+        ],
+        "actuatorMap": {
+          "steer": 0,
+          "throttle": 1
+        },
+        "sensorSet": [
+          "battery"
+        ],
+        "limits": {
+          "maxSteer": 1,
+          "maxThrottle": 1,
+          "maxBrake": 1
+        }
+      }
+    },
+    {
+      "id": "VH-006",
+      "model": "F16 Falcon",
+      "status": "available",
+      "condition": "",
+      "assignedUsers": [
+        "user-1771683571983",
+        "user-1771683424160",
+        "user-2",
+        "user-1",
+        "user-1772289056773"
+      ],
+      "location": "Area 51",
+      "charge": 26,
+      "capabilities": {
+        "vehicleClass": "unknown",
+        "supportedModes": [
+          "manual",
+          "hold"
+        ],
+        "supportedModules": [
+          "control",
+          "location",
+          "sensor_state"
+        ],
+        "actuatorMap": {
+          "steer": 0,
+          "throttle": 1
+        },
+        "sensorSet": [
+          "battery"
+        ],
+        "limits": {
+          "maxSteer": 1,
+          "maxThrottle": 1,
+          "maxBrake": 1
+        }
+      },
+      "currentUser": "Charlton",
+      "currentUserId": "user-1771683424160"
+    },
+    {
+      "id": "VH-007",
+      "model": "F22 Raptor",
+      "status": "unavailable",
+      "condition": "",
+      "assignedUsers": [
+        "user-2",
+        "user-1",
+        "user-1771683424160",
+        "user-1771683571983",
+        "user-1772289056773"
+      ],
+      "location": "Fort Knox",
+      "charge": 100,
+      "currentUser": "Joachim",
+      "currentUserId": "user-1772289056773",
+      "capabilities": {
+        "vehicleClass": "unknown",
+        "supportedModes": [
+          "manual",
+          "hold"
+        ],
+        "supportedModules": [
+          "control",
+          "location",
+          "sensor_state"
+        ],
+        "actuatorMap": {
+          "steer": 0,
+          "throttle": 1
+        },
+        "sensorSet": [
+          "battery"
+        ],
+        "limits": {
+          "maxSteer": 1,
+          "maxThrottle": 1,
+          "maxBrake": 1
+        }
+      }
+    }
+  ],
+  "logs": [
+    {
+      "id": "log-1771683335606",
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "login",
+      "timestamp": "2026-02-21T14:15:35.606Z"
+    },
+    {
+      "id": "log-1771683597563",
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "action": "login",
+      "timestamp": "2026-02-21T14:19:57.563Z"
+    },
+    {
+      "id": "log-1771683968088",
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "login",
+      "timestamp": "2026-02-21T14:26:08.088Z"
+    },
+    {
+      "id": "log-1771683995514",
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "action": "login",
+      "timestamp": "2026-02-21T14:26:35.514Z"
+    },
+    {
+      "id": "log-1771683999382",
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "action": "vehicle_selected",
+      "details": "Selected vehicle F14 Tomcat (VH-004)",
+      "timestamp": "2026-02-21T14:26:39.382Z"
+    },
+    {
+      "id": "log-1771684813149",
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "action": "login",
+      "timestamp": "2026-02-21T14:40:13.149Z"
+    },
+    {
+      "id": "log-1771685016952",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login",
+      "timestamp": "2026-02-21T14:43:36.951Z"
+    },
+    {
+      "id": "log-1771685051931",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "vehicle_selected",
+      "details": "Selected vehicle F22 Raptor (VH-007)",
+      "timestamp": "2026-02-21T14:44:11.931Z"
+    },
+    {
+      "id": "log-1771685158325",
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "action": "login",
+      "timestamp": "2026-02-21T14:45:58.325Z"
+    },
+    {
+      "id": "log-1771685164474",
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "action": "vehicle_resumed",
+      "details": "Resumed vehicle F14 Tomcat (VH-004)",
+      "timestamp": "2026-02-21T14:46:04.474Z"
+    },
+    {
+      "id": "log-1771685357579",
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "login",
+      "timestamp": "2026-02-21T14:49:17.579Z"
+    },
+    {
+      "id": "log-1771685439180",
+      "userId": "user-1771685418445",
+      "username": "Gichunge",
+      "action": "login",
+      "timestamp": "2026-02-21T14:50:39.179Z"
+    },
+    {
+      "id": "log-1771685564016",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login",
+      "timestamp": "2026-02-21T14:52:44.016Z"
+    },
+    {
+      "id": "log-1771685596563",
+      "userId": "user-1771685418445",
+      "username": "Gichunge",
+      "action": "logout",
+      "timestamp": "2026-02-21T14:53:16.563Z"
+    },
+    {
+      "id": "log-1771685605414",
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "login",
+      "timestamp": "2026-02-21T14:53:25.414Z"
+    },
+    {
+      "id": "log-1771686488421",
+      "userId": "user-1",
+      "username": "user1",
+      "action": "login",
+      "timestamp": "2026-02-21T15:08:08.421Z"
+    },
+    {
+      "id": "log-1771686495091",
+      "userId": "user-1",
+      "username": "user1",
+      "action": "vehicle_selected",
+      "details": "Selected vehicle Tesla Model 3 (VH-001)",
+      "timestamp": "2026-02-21T15:08:15.091Z"
+    },
+    {
+      "id": "log-1771687959453",
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "action": "login",
+      "timestamp": "2026-02-21T15:32:39.453Z"
+    },
+    {
+      "id": "log-1771689390744",
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "login",
+      "timestamp": "2026-02-21T15:56:30.744Z"
+    },
+    {
+      "id": "log-1771689408343",
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "action": "login",
+      "timestamp": "2026-02-21T15:56:48.343Z"
+    },
+    {
+      "id": "log-1771689627354",
+      "userId": "user-1",
+      "username": "user1",
+      "action": "login",
+      "timestamp": "2026-02-21T16:00:27.354Z"
+    },
+    {
+      "id": "log-1771702581631",
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "action": "login",
+      "timestamp": "2026-02-21T19:36:21.631Z"
+    },
+    {
+      "id": "log-1771702608525",
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "action": "login",
+      "timestamp": "2026-02-21T19:36:48.525Z"
+    },
+    {
+      "id": "log-1771703110344",
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "login",
+      "timestamp": "2026-02-21T19:45:10.344Z"
+    },
+    {
+      "id": "log-1771703129024",
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "login",
+      "timestamp": "2026-02-21T19:45:29.024Z"
+    },
+    {
+      "id": "log-1771703181139",
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "logout",
+      "timestamp": "2026-02-21T19:46:21.139Z"
+    },
+    {
+      "id": "log-1771703194235",
+      "userId": "user-1771703169655",
+      "username": "Sudo",
+      "action": "login",
+      "timestamp": "2026-02-21T19:46:34.235Z"
+    },
+    {
+      "id": "log-1771703454871",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login",
+      "timestamp": "2026-02-21T19:50:54.871Z"
+    },
+    {
+      "id": "log-1771703627579",
+      "userId": "user-1771703169655",
+      "username": "Sudo",
+      "action": "login",
+      "timestamp": "2026-02-21T19:53:47.578Z"
+    },
+    {
+      "id": "log-1771703697189",
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "login",
+      "timestamp": "2026-02-21T19:54:57.189Z"
+    },
+    {
+      "id": "log-1771703748841",
+      "userId": "user-1",
+      "username": "user1",
+      "action": "login",
+      "timestamp": "2026-02-21T19:55:48.841Z"
+    },
+    {
+      "id": "log-1771765301277",
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "login",
+      "timestamp": "2026-02-22T13:01:41.277Z"
+    },
+    {
+      "id": "log-1771765473029",
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "action": "login",
+      "timestamp": "2026-02-22T13:04:33.029Z"
+    },
+    {
+      "id": "log-1771766535820",
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "action": "login",
+      "timestamp": "2026-02-22T13:22:15.820Z"
+    },
+    {
+      "id": "log-1771769270042",
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "action": "logout",
+      "timestamp": "2026-02-22T14:07:50.042Z"
+    },
+    {
+      "id": "log-1771769289669",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login",
+      "timestamp": "2026-02-22T14:08:09.669Z"
+    },
+    {
+      "id": "log-1771769294765",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "vehicle_unselected",
+      "details": "Unselected vehicle F22 Raptor (VH-007)",
+      "timestamp": "2026-02-22T14:08:14.765Z"
+    },
+    {
+      "id": "log-1771769787228",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "vehicle_selected",
+      "details": "Selected vehicle F22 Raptor (VH-007)",
+      "timestamp": "2026-02-22T14:16:27.228Z"
+    },
+    {
+      "id": "log-1772120157488",
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "action": "login",
+      "timestamp": "2026-02-26T15:35:57.488Z"
+    },
+    {
+      "id": "log-1772120517016",
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "action": "login",
+      "timestamp": "2026-02-26T15:41:57.016Z"
+    },
+    {
+      "id": "log-1772120567001",
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "action": "login",
+      "timestamp": "2026-02-26T15:42:47.001Z"
+    },
+    {
+      "id": "log-1772123564883",
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "action": "login",
+      "timestamp": "2026-02-26T16:32:44.883Z"
+    },
+    {
+      "id": "log-1772123624224",
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "action": "login",
+      "timestamp": "2026-02-26T16:33:44.224Z"
+    },
+    {
+      "id": "log-1772125014046",
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "action": "login",
+      "timestamp": "2026-02-26T16:56:54.046Z"
+    },
+    {
+      "id": "log-1772125837791",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login",
+      "timestamp": "2026-02-26T17:10:37.791Z"
+    },
+    {
+      "id": "log-1772125945739",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login",
+      "timestamp": "2026-02-26T17:12:25.739Z"
+    },
+    {
+      "id": "log-1772126068276",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login",
+      "timestamp": "2026-02-26T17:14:28.276Z"
+    },
+    {
+      "id": "log-1772126393827",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login",
+      "timestamp": "2026-02-26T17:19:53.827Z"
+    },
+    {
+      "id": "log-1772127593667",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login",
+      "timestamp": "2026-02-26T17:39:53.667Z"
+    },
+    {
+      "id": "log-1772128150561",
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "action": "login",
+      "timestamp": "2026-02-26T17:49:10.561Z"
+    },
+    {
+      "id": "log-1772128809951",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login",
+      "timestamp": "2026-02-26T18:00:09.951Z"
+    },
+    {
+      "id": "log-1772129230297",
+      "userId": "user-1772129225629",
+      "username": "Marts",
+      "action": "login",
+      "timestamp": "2026-02-26T18:07:10.297Z"
+    },
+    {
+      "id": "log-1772129236599",
+      "userId": "user-1772129225629",
+      "username": "Marts",
+      "action": "logout",
+      "timestamp": "2026-02-26T18:07:16.599Z"
+    },
+    {
+      "id": "log-1772129241529",
+      "userId": "user-1772129225629",
+      "username": "Marts",
+      "action": "login",
+      "timestamp": "2026-02-26T18:07:21.529Z"
+    },
+    {
+      "id": "log-1772129251452",
+      "userId": "user-1772129225629",
+      "username": "Marts",
+      "action": "logout",
+      "timestamp": "2026-02-26T18:07:31.452Z"
+    },
+    {
+      "id": "log-1772129261690",
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "login",
+      "timestamp": "2026-02-26T18:07:41.690Z"
+    },
+    {
+      "id": "log-1772129312756",
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "logout",
+      "timestamp": "2026-02-26T18:08:32.756Z"
+    },
+    {
+      "id": "log-1772129320869",
+      "userId": "user-1772129225629",
+      "username": "Marts",
+      "action": "login",
+      "timestamp": "2026-02-26T18:08:40.869Z"
+    },
+    {
+      "id": "log-1772129334127",
+      "userId": "user-1772129225629",
+      "username": "Marts",
+      "action": "vehicle_selected",
+      "details": "Selected vehicle Toyota Prius (VH-002)",
+      "timestamp": "2026-02-26T18:08:54.127Z"
+    },
+    {
+      "id": "log-1772129334691",
+      "userId": "user-1772129225629",
+      "username": "Marts",
+      "action": "vehicle_selected",
+      "details": "Selected vehicle Toyota Prius (VH-002)",
+      "timestamp": "2026-02-26T18:08:54.691Z"
+    },
+    {
+      "id": "log-1772129501388",
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "action": "login",
+      "timestamp": "2026-02-26T18:11:41.388Z"
+    },
+    {
+      "id": "log-1772129835724",
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "action": "login",
+      "timestamp": "2026-02-26T18:17:15.724Z"
+    },
+    {
+      "id": "log-1772129971560",
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "login",
+      "timestamp": "2026-02-26T18:19:31.560Z"
+    },
+    {
+      "id": "log-1772130068638",
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "logout",
+      "timestamp": "2026-02-26T18:21:08.638Z"
+    },
+    {
+      "id": "log-1772130089599",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login",
+      "timestamp": "2026-02-26T18:21:29.599Z"
+    },
+    {
+      "id": "log-1772130128162",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login",
+      "timestamp": "2026-02-26T18:22:08.161Z"
+    },
+    {
+      "id": "log-1772130332308",
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "login",
+      "timestamp": "2026-02-26T18:25:32.307Z"
+    },
+    {
+      "id": "log-1772135526954",
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "login",
+      "timestamp": "2026-02-26T19:52:06.954Z"
+    },
+    {
+      "id": "log-1772222818264",
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "action": "login",
+      "timestamp": "2026-02-27T20:06:58.264Z"
+    },
+    {
+      "id": "log-1772224762151",
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "login",
+      "timestamp": "2026-02-27T20:39:22.151Z"
+    },
+    {
+      "id": "log-1772226234815",
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "login",
+      "timestamp": "2026-02-27T21:03:54.815Z"
+    },
+    {
+      "id": "log-1772226289631",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login",
+      "timestamp": "2026-02-27T21:04:49.631Z"
+    },
+    {
+      "id": "log-1772226331787",
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "login",
+      "timestamp": "2026-02-27T21:05:31.787Z"
+    },
+    {
+      "id": "log-1772226363793",
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "login",
+      "timestamp": "2026-02-27T21:06:03.793Z"
+    },
+    {
+      "id": "log-1772288941905",
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "login",
+      "timestamp": "2026-02-28T14:29:01.905Z"
+    },
+    {
+      "id": "log-1772289067006",
+      "userId": "user-1772289056773",
+      "username": "Joachim",
+      "action": "login",
+      "timestamp": "2026-02-28T14:31:07.006Z"
+    },
+    {
+      "id": "log-1772289190582",
+      "userId": "user-1772289056773",
+      "username": "Joachim",
+      "action": "logout",
+      "timestamp": "2026-02-28T14:33:10.581Z"
+    },
+    {
+      "id": "log-1772289231207",
+      "userId": "user-1772289056773",
+      "username": "Joachim",
+      "action": "login",
+      "timestamp": "2026-02-28T14:33:51.207Z"
+    },
+    {
+      "id": "log-1772289313380",
+      "userId": "user-1772289056773",
+      "username": "Joachim",
+      "action": "vehicle_selected",
+      "details": "Selected vehicle F22 Raptor (VH-007)",
+      "timestamp": "2026-02-28T14:35:13.380Z"
+    },
+    {
+      "id": "log-1772290965736",
+      "userId": "user-1772289056773",
+      "username": "Joachim",
+      "action": "login",
+      "timestamp": "2026-02-28T15:02:45.736Z"
+    },
+    {
+      "id": "log-1772826448197",
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "action": "login",
+      "timestamp": "2026-03-06T19:47:28.197Z"
+    },
+    {
+      "id": "log-1772826882178",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login",
+      "timestamp": "2026-03-06T19:54:42.178Z"
+    },
+    {
+      "id": "log-1772826889733",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "vehicle_selected",
+      "details": "Selected vehicle F16 Falcon (VH-006)",
+      "timestamp": "2026-03-06T19:54:49.733Z"
+    },
+    {
+      "id": "log-1772827140189",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login",
+      "timestamp": "2026-03-06T19:59:00.189Z"
+    },
+    {
+      "id": "log-1772827298016",
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "action": "login",
+      "timestamp": "2026-03-06T20:01:38.016Z"
+    },
+    {
+      "id": "log-1772868014587",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login",
+      "timestamp": "2026-03-07T07:20:14.587Z"
+    },
+    {
+      "id": "log-1772871672633",
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "login",
+      "timestamp": "2026-03-07T08:21:12.633Z"
+    },
+    {
+      "id": "log-1772871758757",
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "logout",
+      "timestamp": "2026-03-07T08:22:38.757Z"
+    },
+    {
+      "id": "log-1772871774760",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login",
+      "timestamp": "2026-03-07T08:22:54.760Z"
+    },
+    {
+      "id": "log-1772872351209",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login",
+      "timestamp": "2026-03-07T08:32:31.209Z"
+    },
+    {
+      "id": "log-1772872536038",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "logout",
+      "timestamp": "2026-03-07T08:35:36.038Z"
+    },
+    {
+      "id": "log-1772872537720",
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "login",
+      "timestamp": "2026-03-07T08:35:37.720Z"
+    },
+    {
+      "id": "log-1772872630383",
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "login",
+      "timestamp": "2026-03-07T08:37:10.383Z"
+    },
+    {
+      "id": "log-1772872652542",
+      "userId": "user-1",
+      "username": "user1",
+      "action": "login",
+      "timestamp": "2026-03-07T08:37:32.542Z"
+    },
+    {
+      "id": "log-1772908172038",
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "login",
+      "timestamp": "2026-03-07T18:29:32.038Z"
+    },
+    {
+      "id": "log-1772911425764",
+      "userId": "user-1771685418445",
+      "username": "Gichunge",
+      "action": "login",
+      "timestamp": "2026-03-07T19:23:45.764Z"
+    },
+    {
+      "id": "log-1772911430062",
+      "userId": "user-1771685418445",
+      "username": "Gichunge",
+      "action": "logout",
+      "timestamp": "2026-03-07T19:23:50.062Z"
+    },
+    {
+      "id": "log-1772911452980",
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "action": "login",
+      "timestamp": "2026-03-07T19:24:12.980Z"
+    },
+    {
+      "id": "log-1772950767553",
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "action": "login",
+      "timestamp": "2026-03-08T06:19:27.553Z"
+    },
+    {
+      "id": "log-1772952266721",
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "action": "vehicle_unselected",
+      "details": "Ended session with vehicle F14 Tomcat (VH-004)",
+      "timestamp": "2026-03-08T06:44:26.721Z"
+    },
+    {
+      "id": "log-1772970268935",
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "action": "login",
+      "timestamp": "2026-03-08T11:44:28.935Z"
+    },
+    {
+      "id": "log-1772971219754",
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "action": "logout",
+      "timestamp": "2026-03-08T12:00:19.754Z"
+    },
+    {
+      "id": "log-1772971234460",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login",
+      "timestamp": "2026-03-08T12:00:34.460Z"
+    },
+    {
+      "id": "log-1773005036102",
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "action": "vehicle_unselected",
+      "details": "Ended session with vehicle F14 Tomcat (VH-004)",
+      "timestamp": "2026-03-08T21:23:56.102Z"
+    },
+    {
+      "id": "log-1773066345953",
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "action": "login",
+      "timestamp": "2026-03-09T14:25:45.953Z"
+    },
+    {
+      "id": "log-1773066518429",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login",
+      "timestamp": "2026-03-09T14:28:38.429Z"
+    },
+    {
+      "id": "log-1773066844196",
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "action": "logout",
+      "timestamp": "2026-03-09T14:34:04.196Z"
+    },
+    {
+      "id": "log-1773066845761",
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "login",
+      "timestamp": "2026-03-09T14:34:05.761Z"
+    },
+    {
+      "id": "log-1773066866843",
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "login",
+      "timestamp": "2026-03-09T14:34:26.843Z"
+    },
+    {
+      "id": "log-1773066870590",
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "logout",
+      "timestamp": "2026-03-09T14:34:30.590Z"
+    },
+    {
+      "id": "log-1773066880462",
+      "userId": "user-1771703169655",
+      "username": "Sudo",
+      "action": "login",
+      "timestamp": "2026-03-09T14:34:40.462Z"
+    },
+    {
+      "id": "log-1773066922632",
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "login",
+      "timestamp": "2026-03-09T14:35:22.632Z"
+    },
+    {
+      "id": "log-1773066990557",
+      "userId": "user-1771703169655",
+      "username": "Sudo",
+      "action": "logout",
+      "timestamp": "2026-03-09T14:36:30.557Z"
+    },
+    {
+      "id": "log-1773067667641",
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "logout",
+      "timestamp": "2026-03-09T14:47:47.641Z"
+    },
+    {
+      "id": "log-1773067719380",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login",
+      "timestamp": "2026-03-09T14:48:39.380Z"
+    },
+    {
+      "id": "log-1773067739135",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "vehicle_unselected",
+      "details": "Ended session with vehicle F16 Falcon (VH-006)",
+      "timestamp": "2026-03-09T14:48:59.135Z"
+    },
+    {
+      "id": "log-1773067742205",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "vehicle_selected",
+      "details": "Selected vehicle Tesla Model 3 (VH-001)",
+      "timestamp": "2026-03-09T14:49:02.205Z"
+    },
+    {
+      "id": "log-1773075418131",
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "login",
+      "timestamp": "2026-03-09T16:56:58.131Z"
+    },
+    {
+      "id": "log-1773075433477",
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "login",
+      "timestamp": "2026-03-09T16:57:13.477Z"
+    },
+    {
+      "id": "log-1773075449110",
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "login",
+      "timestamp": "2026-03-09T16:57:29.110Z"
+    },
+    {
+      "id": "log-1773168640296",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login",
+      "timestamp": "2026-03-10T18:50:40.296Z"
+    },
+    {
+      "id": "log-1773169214478",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "vehicle_unselected",
+      "details": "Ended session with vehicle Tesla Model 3 (VH-001)",
+      "timestamp": "2026-03-10T19:00:14.478Z"
+    },
+    {
+      "id": "log-1773173508564",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "vehicle_unselected",
+      "details": "Ended session with vehicle Tesla Model 3 (VH-001)",
+      "timestamp": "2026-03-10T20:11:48.564Z"
+    },
+    {
+      "id": "log-1773173511599",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "vehicle_selected",
+      "details": "Selected vehicle F14 Tomcat (VH-004)",
+      "timestamp": "2026-03-10T20:11:51.599Z"
+    },
+    {
+      "id": "log-1773173546406",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "vehicle_unselected",
+      "details": "Ended session with vehicle F14 Tomcat (VH-004)",
+      "timestamp": "2026-03-10T20:12:26.406Z"
+    },
+    {
+      "id": "log-1773173548036",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "vehicle_selected",
+      "details": "Selected vehicle Tesla Model 3 (VH-001)",
+      "timestamp": "2026-03-10T20:12:28.036Z"
+    },
+    {
+      "id": "log-1773213114387",
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "login",
+      "timestamp": "2026-03-11T07:11:54.387Z"
+    },
+    {
+      "id": "log-1773213543926",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login",
+      "timestamp": "2026-03-11T07:19:03.926Z"
+    },
+    {
+      "id": "log-1773237843500",
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "login",
+      "timestamp": "2026-03-11T14:04:03.500Z"
+    },
+    {
+      "id": "log-1773237859354",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login",
+      "timestamp": "2026-03-11T14:04:19.354Z"
+    },
+    {
+      "id": "log-1773247782656",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "vehicle_unselected",
+      "details": "Ended session with vehicle Tesla Model 3 (VH-001)",
+      "timestamp": "2026-03-11T16:49:42.656Z"
+    },
+    {
+      "id": "log-1773247784474",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "vehicle_selected",
+      "details": "Selected vehicle F14 Tomcat (VH-004)",
+      "timestamp": "2026-03-11T16:49:44.474Z"
+    },
+    {
+      "id": "log-1773247843290",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "vehicle_unselected",
+      "details": "Ended session with vehicle F14 Tomcat (VH-004)",
+      "timestamp": "2026-03-11T16:50:43.290Z"
+    },
+    {
+      "id": "log-1773248243470",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "vehicle_unselected",
+      "details": "Ended session with vehicle Tesla Model 3 (VH-001)",
+      "timestamp": "2026-03-11T16:57:23.470Z"
+    },
+    {
+      "id": "log-1773248245373",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "vehicle_selected",
+      "details": "Selected vehicle F14 Tomcat (VH-004)",
+      "timestamp": "2026-03-11T16:57:25.373Z"
+    },
+    {
+      "id": "log-1773248444912",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "logout",
+      "timestamp": "2026-03-11T17:00:44.912Z"
+    },
+    {
+      "id": "log-1773248459849",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login",
+      "timestamp": "2026-03-11T17:00:59.849Z"
+    },
+    {
+      "id": "log-1773248517548",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "logout",
+      "timestamp": "2026-03-11T17:01:57.548Z"
+    },
+    {
+      "id": "log-1773248533085",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login",
+      "timestamp": "2026-03-11T17:02:13.085Z"
+    },
+    {
+      "id": "log-1773248613266",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "vehicle_unselected",
+      "details": "Ended session with vehicle Tesla Model 3 (VH-001)",
+      "timestamp": "2026-03-11T17:03:33.266Z"
+    },
+    {
+      "id": "log-1773248616144",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "vehicle_resumed",
+      "details": "Resumed vehicle F14 Tomcat (VH-004)",
+      "timestamp": "2026-03-11T17:03:36.144Z"
+    },
+    {
+      "id": "log-1773248676859",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "vehicle_unselected",
+      "details": "Ended session with vehicle F14 Tomcat (VH-004)",
+      "timestamp": "2026-03-11T17:04:36.859Z"
+    },
+    {
+      "id": "log-1773248677796",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "vehicle_selected",
+      "details": "Selected vehicle Tesla Model 3 (VH-001)",
+      "timestamp": "2026-03-11T17:04:37.796Z"
+    },
+    {
+      "id": "log-1773248705537",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "vehicle_unselected",
+      "details": "Ended session with vehicle Tesla Model 3 (VH-001)",
+      "timestamp": "2026-03-11T17:05:05.537Z"
+    },
+    {
+      "id": "log-1773248706457",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "vehicle_selected",
+      "details": "Selected vehicle F14 Tomcat (VH-004)",
+      "timestamp": "2026-03-11T17:05:06.457Z"
+    },
+    {
+      "id": "log-1773248738103",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "vehicle_unselected",
+      "details": "Ended session with vehicle F14 Tomcat (VH-004)",
+      "timestamp": "2026-03-11T17:05:38.103Z"
+    },
+    {
+      "id": "log-1773248738983",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "vehicle_selected",
+      "details": "Selected vehicle Tesla Model 3 (VH-001)",
+      "timestamp": "2026-03-11T17:05:38.983Z"
+    },
+    {
+      "id": "log-1773248768781",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "vehicle_unselected",
+      "details": "Ended session with vehicle Tesla Model 3 (VH-001)",
+      "timestamp": "2026-03-11T17:06:08.781Z"
+    },
+    {
+      "id": "log-1773248769684",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "vehicle_selected",
+      "details": "Selected vehicle F14 Tomcat (VH-004)",
+      "timestamp": "2026-03-11T17:06:09.684Z"
+    },
+    {
+      "id": "log-1773248804230",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "vehicle_unselected",
+      "details": "Ended session with vehicle F14 Tomcat (VH-004)",
+      "timestamp": "2026-03-11T17:06:44.230Z"
+    },
+    {
+      "id": "log-1773336005849",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login",
+      "timestamp": "2026-03-12T17:20:05.849Z"
+    },
+    {
+      "id": "log-1773401569181",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login",
+      "timestamp": "2026-03-13T11:32:49.181Z"
+    },
+    {
+      "id": "log-1773416520023",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login",
+      "timestamp": "2026-03-13T15:42:00.023Z"
+    },
+    {
+      "id": "log-1773428654617",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "vehicle_unselected",
+      "details": "Ended session with vehicle Tesla Model 3 (VH-001)",
+      "timestamp": "2026-03-13T19:04:14.617Z"
+    },
+    {
+      "id": "log-1773428656332",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "logout",
+      "timestamp": "2026-03-13T19:04:16.332Z"
+    },
+    {
+      "id": "log-1773428792513",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login",
+      "timestamp": "2026-03-13T19:06:32.513Z"
+    },
+    {
+      "id": "log-1773429677708",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "vehicle_unselected",
+      "details": "Ended session with vehicle Tesla Model 3 (VH-001)",
+      "timestamp": "2026-03-13T19:21:17.708Z"
+    },
+    {
+      "id": "log-1773429685801",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "vehicle_selected",
+      "details": "Selected vehicle Tesla Model 3 (VH-001)",
+      "timestamp": "2026-03-13T19:21:25.801Z"
+    },
+    {
+      "id": "log-1773574992757",
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "login",
+      "timestamp": "2026-03-15T11:43:12.757Z"
+    },
+    {
+      "id": "log-1773575036621",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login",
+      "timestamp": "2026-03-15T11:43:56.621Z"
+    },
+    {
+      "id": "log-1773575449593",
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "login",
+      "timestamp": "2026-03-15T11:50:49.593Z"
+    },
+    {
+      "id": "log-1773602704049",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login",
+      "timestamp": "2026-03-15T19:25:04.049Z"
+    },
+    {
+      "id": "log-1773603202707",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "vehicle_unselected",
+      "details": "Ended session with vehicle Tesla Model 3 (VH-001)",
+      "timestamp": "2026-03-15T19:33:22.707Z"
+    },
+    {
+      "id": "log-1773603217246",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "vehicle_unselected",
+      "details": "Ended session with vehicle Tesla Model 3 (VH-001)",
+      "timestamp": "2026-03-15T19:33:37.246Z"
+    },
+    {
+      "id": "log-1773603445516",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "vehicle_unselected",
+      "details": "Ended session with vehicle Tesla Model 3 (VH-001)",
+      "timestamp": "2026-03-15T19:37:25.516Z"
+    },
+    {
+      "id": "log-1773603505797",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "vehicle_unselected",
+      "details": "Ended session with vehicle Tesla Model 3 (VH-001)",
+      "timestamp": "2026-03-15T19:38:25.797Z"
+    },
+    {
+      "id": "log-1773671156538",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login",
+      "timestamp": "2026-03-16T14:25:56.538Z"
+    },
+    {
+      "id": "log-1773672665151",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login",
+      "timestamp": "2026-03-16T14:51:05.151Z"
+    },
+    {
+      "id": "log-1773679899388",
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "login",
+      "timestamp": "2026-03-16T16:51:39.388Z"
+    },
+    {
+      "id": "log-1773730755562",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login",
+      "timestamp": "2026-03-17T06:59:15.562Z"
+    },
+    {
+      "id": "log-1773766236570",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login",
+      "timestamp": "2026-03-17T16:50:36.570Z"
+    },
+    {
+      "id": "log-1773819334795",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login",
+      "timestamp": "2026-03-18T07:35:34.795Z"
+    },
+    {
+      "id": "log-1773936545477",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login",
+      "timestamp": "2026-03-19T16:09:05.477Z"
+    },
+    {
+      "id": "log-1773951211575",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login",
+      "timestamp": "2026-03-19T20:13:31.575Z"
+    },
+    {
+      "id": "log-1773951634419",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "logout",
+      "timestamp": "2026-03-19T20:20:34.419Z"
+    },
+    {
+      "id": "log-1773951699112",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "logout",
+      "timestamp": "2026-03-19T20:21:39.112Z"
+    },
+    {
+      "id": "log-1773951718072",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login",
+      "timestamp": "2026-03-19T20:21:58.072Z"
+    },
+    {
+      "id": "log-1773952328832",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "logout",
+      "timestamp": "2026-03-19T20:32:08.832Z"
+    },
+    {
+      "id": "log-1773952344905",
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "action": "login",
+      "timestamp": "2026-03-19T20:32:24.905Z"
+    },
+    {
+      "id": "log-1773952362626",
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "action": "vehicle_selected",
+      "details": "Selected vehicle F14 Tomcat (VH-004)",
+      "timestamp": "2026-03-19T20:32:42.625Z"
+    },
+    {
+      "id": "log-1773952931452",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login",
+      "timestamp": "2026-03-19T20:42:11.452Z"
+    },
+    {
+      "id": "log-1773952977653",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "logout",
+      "timestamp": "2026-03-19T20:42:57.653Z"
+    },
+    {
+      "id": "log-1773991124365",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login",
+      "timestamp": "2026-03-20T07:18:44.365Z"
+    },
+    {
+      "id": "log-1773999951607",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "vehicle_unselected",
+      "details": "Ended session with vehicle Tesla Model 3 (VH-001)",
+      "timestamp": "2026-03-20T09:45:51.607Z"
+    },
+    {
+      "id": "log-1773999964632",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "logout",
+      "timestamp": "2026-03-20T09:46:04.632Z"
+    },
+    {
+      "id": "log-1773999968592",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login",
+      "timestamp": "2026-03-20T09:46:08.592Z"
+    },
+    {
+      "id": "log-1774000061071",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "vehicle_unselected",
+      "details": "Ended session with vehicle Tesla Model 3 (VH-001)",
+      "timestamp": "2026-03-20T09:47:41.071Z"
+    },
+    {
+      "id": "log-1774000062245",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "vehicle_selected",
+      "details": "Selected vehicle Tesla Model 3 (VH-001)",
+      "timestamp": "2026-03-20T09:47:42.245Z"
+    },
+    {
+      "id": "log-1774000366523",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "vehicle_unselected",
+      "details": "Ended session with vehicle Tesla Model 3 (VH-001)",
+      "timestamp": "2026-03-20T09:52:46.523Z"
+    },
+    {
+      "id": "log-1774000382071",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "logout",
+      "timestamp": "2026-03-20T09:53:02.071Z"
+    },
+    {
+      "id": "log-1774000384999",
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login",
+      "timestamp": "2026-03-20T09:53:04.999Z"
+    }
+  ],
+  "records": [
+    {
+      "ts": 1771683335607,
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "login"
+    },
+    {
+      "ts": 1771683597568,
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "action": "login"
+    },
+    {
+      "ts": 1771683968089,
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "login"
+    },
+    {
+      "ts": 1771683995514,
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "action": "login"
+    },
+    {
+      "ts": 1771683999383,
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "vehicleId": "VH-004",
+      "action": "vehicle_selected",
+      "details": "Selected vehicle F14 Tomcat (VH-004)"
+    },
+    {
+      "ts": 1771684813149,
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "action": "login"
+    },
+    {
+      "ts": 1771685016962,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login"
+    },
+    {
+      "ts": 1771685051932,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "vehicleId": "VH-007",
+      "action": "vehicle_selected",
+      "details": "Selected vehicle F22 Raptor (VH-007)"
+    },
+    {
+      "ts": 1771685158327,
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "action": "login"
+    },
+    {
+      "ts": 1771685164476,
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "vehicleId": "VH-004",
+      "action": "vehicle_resumed",
+      "details": "Resumed vehicle F14 Tomcat (VH-004)"
+    },
+    {
+      "ts": 1771685357580,
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "login"
+    },
+    {
+      "ts": 1771685439183,
+      "userId": "user-1771685418445",
+      "username": "Gichunge",
+      "action": "login"
+    },
+    {
+      "ts": 1771685564019,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login"
+    },
+    {
+      "ts": 1771685596565,
+      "userId": "user-1771685418445",
+      "username": "Gichunge",
+      "action": "logout"
+    },
+    {
+      "ts": 1771685605418,
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "login"
+    },
+    {
+      "ts": 1771686488423,
+      "userId": "user-1",
+      "username": "user1",
+      "action": "login"
+    },
+    {
+      "ts": 1771686495094,
+      "userId": "user-1",
+      "username": "user1",
+      "vehicleId": "VH-001",
+      "action": "vehicle_selected",
+      "details": "Selected vehicle Tesla Model 3 (VH-001)"
+    },
+    {
+      "ts": 1771687959454,
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "action": "login"
+    },
+    {
+      "ts": 1771689390744,
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "login"
+    },
+    {
+      "ts": 1771689408344,
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "action": "login"
+    },
+    {
+      "ts": 1771689627357,
+      "userId": "user-1",
+      "username": "user1",
+      "action": "login"
+    },
+    {
+      "ts": 1771702581634,
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "action": "login"
+    },
+    {
+      "ts": 1771702608528,
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "action": "login"
+    },
+    {
+      "ts": 1771703110347,
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "login"
+    },
+    {
+      "ts": 1771703129027,
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "login"
+    },
+    {
+      "ts": 1771703181140,
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "logout"
+    },
+    {
+      "ts": 1771703194242,
+      "userId": "user-1771703169655",
+      "username": "Sudo",
+      "action": "login"
+    },
+    {
+      "ts": 1771703454874,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login"
+    },
+    {
+      "ts": 1771703627583,
+      "userId": "user-1771703169655",
+      "username": "Sudo",
+      "action": "login"
+    },
+    {
+      "ts": 1771703697190,
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "login"
+    },
+    {
+      "ts": 1771703748842,
+      "userId": "user-1",
+      "username": "user1",
+      "action": "login"
+    },
+    {
+      "ts": 1771765301278,
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "login"
+    },
+    {
+      "ts": 1771765473031,
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "action": "login"
+    },
+    {
+      "ts": 1771766535823,
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "action": "login"
+    },
+    {
+      "ts": 1771769270044,
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "action": "logout"
+    },
+    {
+      "ts": 1771769289671,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login"
+    },
+    {
+      "ts": 1771769294768,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "vehicleId": "VH-007",
+      "action": "vehicle_unselected",
+      "details": "Unselected vehicle F22 Raptor (VH-007)"
+    },
+    {
+      "ts": 1771769787229,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "vehicleId": "VH-007",
+      "action": "vehicle_selected",
+      "details": "Selected vehicle F22 Raptor (VH-007)"
+    },
+    {
+      "ts": 1772120157490,
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "action": "login"
+    },
+    {
+      "ts": 1772120517017,
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "action": "login"
+    },
+    {
+      "ts": 1772120567005,
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "action": "login"
+    },
+    {
+      "ts": 1772123564883,
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "action": "login"
+    },
+    {
+      "ts": 1772123624224,
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "action": "login"
+    },
+    {
+      "ts": 1772125014047,
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "action": "login"
+    },
+    {
+      "ts": 1772125837793,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login"
+    },
+    {
+      "ts": 1772125945741,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login"
+    },
+    {
+      "ts": 1772126068279,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login"
+    },
+    {
+      "ts": 1772126393829,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login"
+    },
+    {
+      "ts": 1772127593671,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login"
+    },
+    {
+      "ts": 1772128150561,
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "action": "login"
+    },
+    {
+      "ts": 1772128809954,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login"
+    },
+    {
+      "ts": 1772129230297,
+      "userId": "user-1772129225629",
+      "username": "Marts",
+      "action": "login"
+    },
+    {
+      "ts": 1772129236600,
+      "userId": "user-1772129225629",
+      "username": "Marts",
+      "action": "logout"
+    },
+    {
+      "ts": 1772129241529,
+      "userId": "user-1772129225629",
+      "username": "Marts",
+      "action": "login"
+    },
+    {
+      "ts": 1772129251453,
+      "userId": "user-1772129225629",
+      "username": "Marts",
+      "action": "logout"
+    },
+    {
+      "ts": 1772129261693,
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "login"
+    },
+    {
+      "ts": 1772129312757,
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "logout"
+    },
+    {
+      "ts": 1772129320872,
+      "userId": "user-1772129225629",
+      "username": "Marts",
+      "action": "login"
+    },
+    {
+      "ts": 1772129334130,
+      "userId": "user-1772129225629",
+      "username": "Marts",
+      "vehicleId": "VH-002",
+      "action": "vehicle_selected",
+      "details": "Selected vehicle Toyota Prius (VH-002)"
+    },
+    {
+      "ts": 1772129334693,
+      "userId": "user-1772129225629",
+      "username": "Marts",
+      "vehicleId": "VH-002",
+      "action": "vehicle_selected",
+      "details": "Selected vehicle Toyota Prius (VH-002)"
+    },
+    {
+      "ts": 1772129501389,
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "action": "login"
+    },
+    {
+      "ts": 1772129835727,
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "action": "login"
+    },
+    {
+      "ts": 1772129971563,
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "login"
+    },
+    {
+      "ts": 1772130068640,
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "logout"
+    },
+    {
+      "ts": 1772130089600,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login"
+    },
+    {
+      "ts": 1772130128165,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login"
+    },
+    {
+      "ts": 1772130332311,
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "login"
+    },
+    {
+      "ts": 1772135526954,
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "login"
+    },
+    {
+      "ts": 1772222818264,
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "action": "login"
+    },
+    {
+      "ts": 1772224762152,
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "login"
+    },
+    {
+      "ts": 1772226234816,
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "login"
+    },
+    {
+      "ts": 1772226289631,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login"
+    },
+    {
+      "ts": 1772226331787,
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "login"
+    },
+    {
+      "ts": 1772226363793,
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "login"
+    },
+    {
+      "ts": 1772288941905,
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "login"
+    },
+    {
+      "ts": 1772289067013,
+      "userId": "user-1772289056773",
+      "username": "Joachim",
+      "action": "login"
+    },
+    {
+      "ts": 1772289190594,
+      "userId": "user-1772289056773",
+      "username": "Joachim",
+      "action": "logout"
+    },
+    {
+      "ts": 1772289231213,
+      "userId": "user-1772289056773",
+      "username": "Joachim",
+      "action": "login"
+    },
+    {
+      "ts": 1772289313382,
+      "userId": "user-1772289056773",
+      "username": "Joachim",
+      "vehicleId": "VH-007",
+      "action": "vehicle_selected",
+      "details": "Selected vehicle F22 Raptor (VH-007)"
+    },
+    {
+      "ts": 1772290965741,
+      "userId": "user-1772289056773",
+      "username": "Joachim",
+      "action": "login"
+    },
+    {
+      "ts": 1772826448198,
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "action": "login"
+    },
+    {
+      "ts": 1772826882179,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login"
+    },
+    {
+      "ts": 1772826889733,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "vehicleId": "VH-006",
+      "action": "vehicle_selected",
+      "details": "Selected vehicle F16 Falcon (VH-006)"
+    },
+    {
+      "ts": 1772827140189,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login"
+    },
+    {
+      "ts": 1772827298021,
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "action": "login"
+    },
+    {
+      "ts": 1772868014587,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login"
+    },
+    {
+      "ts": 1772871672633,
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "login"
+    },
+    {
+      "ts": 1772871758758,
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "logout"
+    },
+    {
+      "ts": 1772871774760,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login"
+    },
+    {
+      "ts": 1772872351210,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login"
+    },
+    {
+      "ts": 1772872536038,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "logout"
+    },
+    {
+      "ts": 1772872537721,
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "login"
+    },
+    {
+      "ts": 1772872630383,
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "login"
+    },
+    {
+      "ts": 1772872652542,
+      "userId": "user-1",
+      "username": "user1",
+      "action": "login"
+    },
+    {
+      "ts": 1772908172038,
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "login"
+    },
+    {
+      "ts": 1772911425764,
+      "userId": "user-1771685418445",
+      "username": "Gichunge",
+      "action": "login"
+    },
+    {
+      "ts": 1772911430062,
+      "userId": "user-1771685418445",
+      "username": "Gichunge",
+      "action": "logout"
+    },
+    {
+      "ts": 1772911452981,
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "action": "login"
+    },
+    {
+      "ts": 1772950767554,
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "action": "login"
+    },
+    {
+      "ts": 1772952266721,
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "vehicleId": "VH-004",
+      "action": "vehicle_unselected",
+      "details": "Ended session with vehicle F14 Tomcat (VH-004)"
+    },
+    {
+      "ts": 1772970268936,
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "action": "login"
+    },
+    {
+      "ts": 1772971219757,
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "action": "logout"
+    },
+    {
+      "ts": 1772971234461,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login"
+    },
+    {
+      "ts": 1773005036102,
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "vehicleId": "VH-004",
+      "action": "vehicle_unselected",
+      "details": "Ended session with vehicle F14 Tomcat (VH-004)"
+    },
+    {
+      "ts": 1773066345954,
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "action": "login"
+    },
+    {
+      "ts": 1773066518433,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login"
+    },
+    {
+      "ts": 1773066844196,
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "action": "logout"
+    },
+    {
+      "ts": 1773066845762,
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "login"
+    },
+    {
+      "ts": 1773066866843,
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "login"
+    },
+    {
+      "ts": 1773066870590,
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "logout"
+    },
+    {
+      "ts": 1773066880463,
+      "userId": "user-1771703169655",
+      "username": "Sudo",
+      "action": "login"
+    },
+    {
+      "ts": 1773066922635,
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "login"
+    },
+    {
+      "ts": 1773066990562,
+      "userId": "user-1771703169655",
+      "username": "Sudo",
+      "action": "logout"
+    },
+    {
+      "ts": 1773067667644,
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "logout"
+    },
+    {
+      "ts": 1773067719383,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login"
+    },
+    {
+      "ts": 1773067739138,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "vehicleId": "VH-006",
+      "action": "vehicle_unselected",
+      "details": "Ended session with vehicle F16 Falcon (VH-006)"
+    },
+    {
+      "ts": 1773067742208,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "vehicleId": "VH-001",
+      "action": "vehicle_selected",
+      "details": "Selected vehicle Tesla Model 3 (VH-001)"
+    },
+    {
+      "ts": 1773075418131,
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "login"
+    },
+    {
+      "ts": 1773075433477,
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "login"
+    },
+    {
+      "ts": 1773075449110,
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "login"
+    },
+    {
+      "ts": 1773168640297,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login"
+    },
+    {
+      "ts": 1773169214479,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "vehicleId": "VH-001",
+      "action": "vehicle_unselected",
+      "details": "Ended session with vehicle Tesla Model 3 (VH-001)"
+    },
+    {
+      "ts": 1773173508565,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "vehicleId": "VH-001",
+      "action": "vehicle_unselected",
+      "details": "Ended session with vehicle Tesla Model 3 (VH-001)"
+    },
+    {
+      "ts": 1773173511600,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "vehicleId": "VH-004",
+      "action": "vehicle_selected",
+      "details": "Selected vehicle F14 Tomcat (VH-004)"
+    },
+    {
+      "ts": 1773173546407,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "vehicleId": "VH-004",
+      "action": "vehicle_unselected",
+      "details": "Ended session with vehicle F14 Tomcat (VH-004)"
+    },
+    {
+      "ts": 1773173548036,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "vehicleId": "VH-001",
+      "action": "vehicle_selected",
+      "details": "Selected vehicle Tesla Model 3 (VH-001)"
+    },
+    {
+      "ts": 1773213114387,
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "login"
+    },
+    {
+      "ts": 1773213543926,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login"
+    },
+    {
+      "ts": 1773237843501,
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "login"
+    },
+    {
+      "ts": 1773237859354,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login"
+    },
+    {
+      "ts": 1773247782656,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "vehicleId": "VH-001",
+      "action": "vehicle_unselected",
+      "details": "Ended session with vehicle Tesla Model 3 (VH-001)"
+    },
+    {
+      "ts": 1773247784474,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "vehicleId": "VH-004",
+      "action": "vehicle_selected",
+      "details": "Selected vehicle F14 Tomcat (VH-004)"
+    },
+    {
+      "ts": 1773247843291,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "vehicleId": "VH-004",
+      "action": "vehicle_unselected",
+      "details": "Ended session with vehicle F14 Tomcat (VH-004)"
+    },
+    {
+      "ts": 1773248243470,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "vehicleId": "VH-001",
+      "action": "vehicle_unselected",
+      "details": "Ended session with vehicle Tesla Model 3 (VH-001)"
+    },
+    {
+      "ts": 1773248245375,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "vehicleId": "VH-004",
+      "action": "vehicle_selected",
+      "details": "Selected vehicle F14 Tomcat (VH-004)"
+    },
+    {
+      "ts": 1773248444914,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "logout"
+    },
+    {
+      "ts": 1773248459851,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login"
+    },
+    {
+      "ts": 1773248517550,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "logout"
+    },
+    {
+      "ts": 1773248533086,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login"
+    },
+    {
+      "ts": 1773248613266,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "vehicleId": "VH-001",
+      "action": "vehicle_unselected",
+      "details": "Ended session with vehicle Tesla Model 3 (VH-001)"
+    },
+    {
+      "ts": 1773248616145,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "vehicleId": "VH-004",
+      "action": "vehicle_resumed",
+      "details": "Resumed vehicle F14 Tomcat (VH-004)"
+    },
+    {
+      "ts": 1773248676859,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "vehicleId": "VH-004",
+      "action": "vehicle_unselected",
+      "details": "Ended session with vehicle F14 Tomcat (VH-004)"
+    },
+    {
+      "ts": 1773248677797,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "vehicleId": "VH-001",
+      "action": "vehicle_selected",
+      "details": "Selected vehicle Tesla Model 3 (VH-001)"
+    },
+    {
+      "ts": 1773248705537,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "vehicleId": "VH-001",
+      "action": "vehicle_unselected",
+      "details": "Ended session with vehicle Tesla Model 3 (VH-001)"
+    },
+    {
+      "ts": 1773248706459,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "vehicleId": "VH-004",
+      "action": "vehicle_selected",
+      "details": "Selected vehicle F14 Tomcat (VH-004)"
+    },
+    {
+      "ts": 1773248738104,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "vehicleId": "VH-004",
+      "action": "vehicle_unselected",
+      "details": "Ended session with vehicle F14 Tomcat (VH-004)"
+    },
+    {
+      "ts": 1773248738983,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "vehicleId": "VH-001",
+      "action": "vehicle_selected",
+      "details": "Selected vehicle Tesla Model 3 (VH-001)"
+    },
+    {
+      "ts": 1773248768782,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "vehicleId": "VH-001",
+      "action": "vehicle_unselected",
+      "details": "Ended session with vehicle Tesla Model 3 (VH-001)"
+    },
+    {
+      "ts": 1773248769685,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "vehicleId": "VH-004",
+      "action": "vehicle_selected",
+      "details": "Selected vehicle F14 Tomcat (VH-004)"
+    },
+    {
+      "ts": 1773248804231,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "vehicleId": "VH-004",
+      "action": "vehicle_unselected",
+      "details": "Ended session with vehicle F14 Tomcat (VH-004)"
+    },
+    {
+      "ts": 1773336005849,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login"
+    },
+    {
+      "ts": 1773401569181,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login"
+    },
+    {
+      "ts": 1773416520024,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login"
+    },
+    {
+      "ts": 1773428654617,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "vehicleId": "VH-001",
+      "action": "vehicle_unselected",
+      "details": "Ended session with vehicle Tesla Model 3 (VH-001)"
+    },
+    {
+      "ts": 1773428656332,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "logout"
+    },
+    {
+      "ts": 1773428792518,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login"
+    },
+    {
+      "ts": 1773429677710,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "vehicleId": "VH-001",
+      "action": "vehicle_unselected",
+      "details": "Ended session with vehicle Tesla Model 3 (VH-001)"
+    },
+    {
+      "ts": 1773429685804,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "vehicleId": "VH-001",
+      "action": "vehicle_selected",
+      "details": "Selected vehicle Tesla Model 3 (VH-001)"
+    },
+    {
+      "ts": 1773574992758,
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "login"
+    },
+    {
+      "ts": 1773575036621,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login"
+    },
+    {
+      "ts": 1773575449593,
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "login"
+    },
+    {
+      "ts": 1773602704049,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login"
+    },
+    {
+      "ts": 1773603202708,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "vehicleId": "VH-001",
+      "action": "vehicle_unselected",
+      "details": "Ended session with vehicle Tesla Model 3 (VH-001)"
+    },
+    {
+      "ts": 1773603217246,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "vehicleId": "VH-001",
+      "action": "vehicle_unselected",
+      "details": "Ended session with vehicle Tesla Model 3 (VH-001)"
+    },
+    {
+      "ts": 1773603445516,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "vehicleId": "VH-001",
+      "action": "vehicle_unselected",
+      "details": "Ended session with vehicle Tesla Model 3 (VH-001)"
+    },
+    {
+      "ts": 1773603505798,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "vehicleId": "VH-001",
+      "action": "vehicle_unselected",
+      "details": "Ended session with vehicle Tesla Model 3 (VH-001)"
+    },
+    {
+      "ts": 1773671156538,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login"
+    },
+    {
+      "ts": 1773672665152,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login"
+    },
+    {
+      "ts": 1773679899389,
+      "userId": "admin-1",
+      "username": "admin",
+      "action": "login"
+    },
+    {
+      "ts": 1773730755562,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login"
+    },
+    {
+      "ts": 1773766236571,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login"
+    },
+    {
+      "ts": 1773819334795,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login"
+    },
+    {
+      "ts": 1773936545478,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login"
+    },
+    {
+      "ts": 1773951211579,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login"
+    },
+    {
+      "ts": 1773951634420,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "logout"
+    },
+    {
+      "ts": 1773951699114,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "logout"
+    },
+    {
+      "ts": 1773951718075,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login"
+    },
+    {
+      "ts": 1773952328834,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "logout"
+    },
+    {
+      "ts": 1773952344909,
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "action": "login"
+    },
+    {
+      "ts": 1773952362629,
+      "userId": "user-1771683571983",
+      "username": "Muguna",
+      "vehicleId": "VH-004",
+      "action": "vehicle_selected",
+      "details": "Selected vehicle F14 Tomcat (VH-004)"
+    },
+    {
+      "ts": 1773952931452,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login"
+    },
+    {
+      "ts": 1773952977653,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "logout"
+    },
+    {
+      "ts": 1773991124365,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login"
+    },
+    {
+      "ts": 1773999951607,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "vehicleId": "VH-001",
+      "action": "vehicle_unselected",
+      "details": "Ended session with vehicle Tesla Model 3 (VH-001)"
+    },
+    {
+      "ts": 1773999964632,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "logout"
+    },
+    {
+      "ts": 1773999968592,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login"
+    },
+    {
+      "ts": 1774000061072,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "vehicleId": "VH-001",
+      "action": "vehicle_unselected",
+      "details": "Ended session with vehicle Tesla Model 3 (VH-001)"
+    },
+    {
+      "ts": 1774000062246,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "vehicleId": "VH-001",
+      "action": "vehicle_selected",
+      "details": "Selected vehicle Tesla Model 3 (VH-001)"
+    },
+    {
+      "ts": 1774000366523,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "vehicleId": "VH-001",
+      "action": "vehicle_unselected",
+      "details": "Ended session with vehicle Tesla Model 3 (VH-001)"
+    },
+    {
+      "ts": 1774000382071,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "logout"
+    },
+    {
+      "ts": 1774000384999,
+      "userId": "user-1771683424160",
+      "username": "Charlton",
+      "action": "login"
+    }
+  ]
+}

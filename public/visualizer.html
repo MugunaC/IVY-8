@@ -1,0 +1,1038 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>IVY Controller Visualizer</title>
+  <style>
+    :root {
+      --bg: #111;
+      --panel: #1b1b1b;
+      --text: #ddd;
+      --accent: #55ff77;
+      --muted: #8a8a8a;
+      --controller-bleed: 24px;
+      --controller-width: 806px;
+      --controller-height: 598px;
+      --skin-base: url("dualshock4-overlays/blue/base.png");
+      --skin-disconnected: url("dualshock4-overlays/blue/disconnected.png");
+      --skin-triggers: url("dualshock4-overlays/blue/triggers.png");
+      --skin-bumper: url("dualshock4-overlays/blue/bumper.png");
+      --skin-touchpad: url("dualshock4-overlays/blue/touchpad.png");
+      --skin-meta: url("dualshock4-overlays/blue/meta.png");
+      --skin-start: url("dualshock4-overlays/blue/start.png");
+      --skin-face: url("dualshock4-overlays/blue/face.png");
+      --skin-sticks: url("dualshock4-overlays/blue/sticks.png");
+      --skin-dpad: url("dualshock4-overlays/blue/dpad.png");
+    }
+    body[data-skin="shura"] {
+      --skin-base: url("dualshock4-overlays/shura/base.png");
+      --skin-disconnected: url("dualshock4-overlays/shura/disconnected.png");
+      --skin-triggers: url("dualshock4-overlays/shura/triggers.png");
+      --skin-bumper: url("dualshock4-overlays/shura/bumper.png");
+      --skin-touchpad: url("dualshock4-overlays/shura/touchpad.png");
+      --skin-meta: url("dualshock4-overlays/shura/meta.png");
+      --skin-start: url("dualshock4-overlays/shura/start.png");
+      --skin-face: url("dualshock4-overlays/shura/face.png");
+      --skin-sticks: url("dualshock4-overlays/shura/sticks.png");
+      --skin-dpad: url("dualshock4-overlays/shura/dpad.png");
+    }
+    body[data-skin="ps5"] {
+      --controller-width: 807px;
+      --controller-height: 651px;
+      --skin-base: url("dualsense-overlays/base.png");
+      --skin-sticks: url("dualsense-overlays/sticks.png");
+      --skin-face: url("dualsense-overlays/face.png");
+      --skin-start: url("dualsense-overlays/start.png");
+      --skin-dpad: url("dualsense-overlays/dpad.png");
+      --skin-bumper: url("dualsense-overlays/bumper.png");
+      --skin-triggers: url("dualsense-overlays/triggers.png");
+      --skin-meta: url("dualsense-overlays/ps-color.png");
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, Segoe UI, Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      overflow: hidden;
+    }
+    .hud {
+      width: min(980px, 100%);
+      padding: 16px 20px 6px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .hud .left {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+    }
+    #status {
+      font-weight: 700;
+      letter-spacing: 0.2px;
+    }
+    #status.connected { color: var(--accent); }
+    #status.disconnected { color: #ff6b6b; }
+    #gamepad-id {
+      font-size: 12px;
+      color: var(--muted);
+      max-width: 60vw;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .hint {
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .skin-select {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .skin-select select {
+      background: #222;
+      color: #eee;
+      border: 1px solid #333;
+      border-radius: 6px;
+      padding: 4px 6px;
+    }
+    #debug {
+      font-size: 11px;
+      color: #6f6f6f;
+      margin-top: 4px;
+    }
+
+    .stage {
+      width: 100%;
+      padding: 10px 16px 24px;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      overflow: hidden;
+    }
+    #controller-scale {
+      transform-origin: top center;
+      width: calc(var(--controller-width) + (var(--controller-bleed) * 2));
+      height: calc(var(--controller-height) + (var(--controller-bleed) * 2));
+      padding: var(--controller-bleed);
+    }
+
+    .controller {
+      position: relative;
+      width: var(--controller-width);
+      height: var(--controller-height);
+    }
+
+    /* DS4 Skin */
+    .controller.ds4 {
+      background: var(--skin-base) no-repeat;
+    }
+    .ds4.disconnected {
+      background: var(--skin-disconnected) no-repeat;
+    }
+    .ds4.disconnected div { display: none; }
+
+    .ds4 .triggers {
+      width: 588px;
+      height: 90px;
+      position: absolute;
+      left: 109px;
+    }
+    .ds4 .trigger {
+      width: 99px;
+      height: 100%;
+      background: var(--skin-triggers);
+      opacity: 0;
+    }
+    .ds4 .trigger.left { float: left; }
+    .ds4 .trigger.right {
+      float: right;
+      background-position-x: 99px;
+    }
+
+    .ds4 .bumpers {
+      position: absolute;
+      width: 588px;
+      height: 23px;
+      left: 109px;
+      top: 94px;
+    }
+    .ds4 .bumper {
+      width: 99px;
+      height: 23px;
+      background: var(--skin-bumper) no-repeat;
+      opacity: 0;
+    }
+    .ds4 .bumper.pressed { opacity: 1; }
+    .ds4 .bumper.left { float: left; }
+    .ds4 .bumper.right {
+      float: right;
+      transform: rotateY(180deg);
+    }
+
+    .ds4 .touchpad {
+      width: 262px;
+      height: 151px;
+      position: absolute;
+      left: 272px;
+      top: 122px;
+    }
+    .ds4 .touchpad.pressed {
+      background: var(--skin-touchpad) no-repeat center;
+    }
+
+    .ds4 .meta {
+      width: 42px;
+      height: 42px;
+      position: absolute;
+      left: 382px;
+      bottom: 216px;
+    }
+    .ds4 .meta.pressed {
+      background: var(--skin-meta) no-repeat center;
+    }
+
+    .ds4 .arrows {
+      position: absolute;
+      width: 352px;
+      height: 46px;
+      top: 142px;
+      left: 227px;
+    }
+    .ds4 .back,
+    .ds4 .start {
+      background: var(--skin-start);
+      width: 28px;
+      height: 46px;
+      opacity: 0;
+    }
+    .ds4 .back.pressed,
+    .ds4 .start.pressed {
+      opacity: 1;
+    }
+    .ds4 .back { float: left; }
+    .ds4 .start {
+      float: right;
+      background-position: 28px 0;
+    }
+
+    .ds4 .abxy {
+      position: absolute;
+      width: 170px;
+      height: 171px;
+      top: 159px;
+      left: 567px;
+    }
+    .ds4 .button {
+      position: absolute;
+      width: 55px;
+      height: 55px;
+      background: var(--skin-face);
+    }
+    .ds4 .button.pressed { background-position-y: 55px; }
+    .ds4 .a {
+      background-position: 0 0;
+      bottom: 0;
+      left: 58px;
+    }
+    .ds4 .b {
+      background-position: -57px 0;
+      top: 58px;
+      right: 0px;
+    }
+    .ds4 .x {
+      background-position: -113px 0;
+      top: 58px;
+    }
+    .ds4 .y {
+      background-position: 55px 0;
+      left: 58px;
+    }
+
+    .ds4 .sticks {
+      position: absolute;
+      width: 361px;
+      height: 105px;
+      top: 308px;
+      left: 228px;
+    }
+    .ds4 .stick {
+      position: absolute;
+      background: var(--skin-sticks);
+      height: 94px;
+      width: 94px;
+      transition: transform 0.02s linear;
+    }
+    .ds4 .stick.pressed.left { background-position-x: -96px; }
+    .ds4 .stick.pressed.right { background-position-x: -192px; }
+    .ds4 .stick.left { top: 0; left: 0; }
+    .ds4 .stick.right {
+      top: calc(100% - 105px);
+      left: calc(100% - 105px);
+    }
+
+    .ds4 .dpad {
+      position: absolute;
+      width: 125px;
+      height: 126px;
+      top: 181px;
+      left: 92px;
+    }
+    .ds4 .face {
+      background: var(--skin-dpad);
+      position: absolute;
+    }
+    .ds4 .face.up,
+    .ds4 .face.down {
+      width: 36px;
+      height: 52px;
+    }
+    .ds4 .face.left,
+    .ds4 .face.right {
+      width: 52px;
+      height: 36px;
+    }
+    .ds4 .face.up {
+      left: 44px;
+      top: 0;
+      background-position: -37px 0px;
+    }
+    .ds4 .face.down {
+      left: 44px;
+      bottom: 0;
+      background-position: 0px 0;
+    }
+    .ds4 .face.left {
+      top: 45px;
+      left: 0;
+      background-position: 104px 0;
+    }
+    .ds4 .face.right {
+      top: 45px;
+      right: 0px;
+      background-position: 52px 0;
+    }
+    .ds4 .face.pressed { background-position-y: 52px; }
+
+    /* PS5 Skin */
+    .controller.ps5 {
+      background: var(--skin-base) no-repeat;
+    }
+    .ps5.disconnected {
+      filter: grayscale(1) brightness(0.75);
+    }
+
+    .ps5 .sticks {
+      width: 367px;
+      height: 100px;
+      left: 220px;
+      top: 333px;
+      position: absolute;
+    }
+    .ps5 .stick {
+      background: var(--skin-sticks);
+      width: 100px;
+      height: 100px;
+      position: absolute;
+      transition: transform 0.05s linear;
+    }
+    .ps5 .stick.pressed,
+    .ps5 .stick.active { background-position: -102px 0; }
+    .ps5 .stick.right {
+      top: 0;
+      left: 267px;
+    }
+
+    .ps5 .abxy {
+      width: 181px;
+      height: 181px;
+      left: 573px;
+      top: 178px;
+      position: absolute;
+    }
+    .ps5 .button {
+      background: var(--skin-face);
+      width: 58px;
+      height: 58px;
+      position: absolute;
+      opacity: 0;
+      transition: opacity 0.05s ease-out, transform 0.05s ease-out, filter 0.05s ease-out;
+    }
+    .ps5 .button.pressed {
+      background-position-y: -59px;
+      margin-top: 0;
+    }
+    .ps5 .button.active {
+      opacity: 1;
+      transform: translateY(1px);
+      filter: brightness(1.2);
+    }
+    .ps5 .a {
+      background-position: 0 0;
+      left: 61px;
+      top: 123px;
+    }
+    .ps5 .b {
+      background-position: -59px 0;
+      left: 123px;
+      top: 62px;
+    }
+    .ps5 .x {
+      background-position: -118px 0;
+      left: 0px;
+      top: 61px;
+    }
+    .ps5 .y {
+      background-position: -177px 0;
+      left: 61px;
+      top: 0px;
+    }
+
+    .ps5 .arrows {
+      left: 195px;
+      top: 140px;
+      width: 416px;
+      height: 57px;
+      position: absolute;
+    }
+    .ps5 .back,
+    .ps5 .start {
+      background: var(--skin-start);
+      width: 27px;
+      height: 57px;
+      opacity: 0;
+      position: absolute;
+    }
+    .ps5 .start {
+      background-position: 27px 0;
+      right: 0;
+    }
+    .ps5 .back.pressed,
+    .ps5 .start.pressed,
+    .ps5 .back.active,
+    .ps5 .start.active {
+      opacity: 1;
+      transform: translateY(1px);
+      filter: brightness(1.1);
+    }
+
+    .ps5 .dpad {
+      width: 144px;
+      height: 144px;
+      left: 71px;
+      top: 196px;
+      position: absolute;
+    }
+    .ps5 .face {
+      background: var(--skin-dpad);
+      position: absolute;
+      opacity: 0;
+      transition: opacity 0.05s ease-out, transform 0.05s ease-out;
+    }
+    .ps5 .face.pressed,
+    .ps5 .face.active {
+      opacity: 1;
+      transform: translateY(1px);
+    }
+    .ps5 .face.up {
+      background-position: 0 -68px;
+      width: 52px;
+      height: 63px;
+      left: 46px;
+    }
+    .ps5 .face.down {
+      background-position: -54px 63px;
+      width: 52px;
+      height: 63px;
+      left: 46px;
+      top: 81px;
+    }
+    .ps5 .face.left {
+      background-position: -108px -68px;
+      width: 64px;
+      height: 52px;
+      left: -1px;
+      top: 47px;
+    }
+    .ps5 .face.right {
+      background-position: -175px -68px;
+      width: 63px;
+      height: 52px;
+      left: 81px;
+      top: 46px;
+    }
+
+    .ps5 .bumpers {
+      width: 620px;
+      height: 35px;
+      left: 93px;
+      top: 114px;
+      position: absolute;
+      z-index: 2;
+    }
+    .ps5 .bumper {
+      background: var(--skin-bumper);
+      width: 110px;
+      height: 35px;
+      opacity: 0;
+      position: absolute;
+    }
+    .ps5 .bumper.pressed,
+    .ps5 .bumper.active {
+      opacity: 1;
+      transform: translateY(1px);
+      filter: brightness(1.1);
+    }
+    .ps5 .bumper.left {
+      left: 0;
+    }
+    .ps5 .bumper.right {
+      right: 0;
+      background-position: 0 0;
+      transform: scaleX(-1);
+      transform-origin: center;
+    }
+    .ps5 .bumper.right.pressed,
+    .ps5 .bumper.right.active {
+      background-position: 0 -36px;
+      transform: scaleX(-1) translateY(1px);
+    }
+
+    .ps5 .triggers {
+      width: 619px;
+      height: 108px;
+      left: 94px;
+      position: absolute;
+      top: 0;
+      z-index: 1;
+    }
+    .ps5 .trigger {
+      background: var(--skin-triggers);
+      width: 111px;
+      height: 108px;
+      opacity: 0;
+      position: absolute;
+      top: 0;
+    }
+    .ps5 .trigger.left { left: 0; }
+    .ps5 .trigger.right {
+      background-position: -113px 0;
+      right: 0;
+    }
+
+    .ps5 .touchpad {
+      position: absolute;
+      left: 380px;
+      top: 200px;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: rgba(45, 90, 240, 0.85);
+      box-shadow: 0 0 10px rgba(45, 90, 240, 0.6);
+      opacity: 0;
+      transition: opacity 0.05s ease-out, transform 0.05s ease-out, filter 0.05s ease-out;
+      z-index: 3;
+    }
+    .ps5 .touchpad.pressed,
+    .ps5 .touchpad.active {
+      opacity: 1;
+      transform: translateY(1px);
+    }
+
+    .ps5 .meta {
+      position: absolute;
+      left: 373px;
+      top: 345px;
+      width: 60px;
+      height: 60px;
+      background: var(--skin-meta) no-repeat center;
+      background-size: contain;
+      opacity: 0;
+      transition: opacity 0.05s ease-out, transform 0.05s ease-out, filter 0.05s ease-out;
+      z-index: 3;
+    }
+    .ps5 .meta.pressed,
+    .ps5 .meta.active {
+      opacity: 1;
+      transform: translateY(1px);
+    }
+
+    .trigger-button, .wheel { display: none; }
+
+    .gate {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.75);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 20;
+      padding: 16px;
+    }
+    .gate-panel {
+      background: var(--panel);
+      padding: 18px 20px;
+      border-radius: 12px;
+      border: 1px solid #2a2a2a;
+      text-align: center;
+      width: min(420px, 100%);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+    }
+    .gate-title {
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .gate-text {
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 12px;
+    }
+    .gate-panel button {
+      background: #2c2c2c;
+      color: #fff;
+      border: 1px solid #3a3a3a;
+      padding: 8px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .gate-panel button:hover { background: #3a3a3a; }
+    .gate-debug {
+      margin-top: 10px;
+      font-size: 11px;
+      color: #6f6f6f;
+    }
+    .pause-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.45);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 15;
+      padding: 16px;
+    }
+    .pause-overlay.active { display: flex; }
+    .pause-panel {
+      background: var(--panel);
+      padding: 12px 16px;
+      border-radius: 10px;
+      border: 1px solid #2a2a2a;
+      font-size: 13px;
+      color: var(--text);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+    }
+
+    @media (max-width: 768px) {
+      .hud {
+        padding: 8px 10px 4px;
+        gap: 8px;
+      }
+      .hint {
+        display: none;
+      }
+      #gamepad-id {
+        max-width: 82vw;
+      }
+      .stage {
+        padding: 6px 8px 10px;
+      }
+      :root {
+        --controller-bleed: 14px;
+      }
+    }
+
+    body.compact .hud {
+      padding: 4px 8px 2px;
+      gap: 6px;
+    }
+    body.compact .hint,
+    body.compact #debug,
+    body.compact #gamepad-id {
+      display: none;
+    }
+    body.compact .skin-select label {
+      display: none;
+    }
+    body.compact .skin-select select {
+      padding: 2px 4px;
+      font-size: 11px;
+    }
+    body.compact .stage {
+      padding: 2px 4px 6px;
+    }
+    body.compact {
+      --controller-bleed: 8px;
+    }
+  </style>
+</head>
+<body data-skin="blue">
+  <div class="gate" id="gate">
+    <div class="gate-panel">
+      <div class="gate-title">Enable Controller Input</div>
+      <div class="gate-text">Click Start, then press any controller button.</div>
+      <button id="start-btn" type="button">Start</button>
+      <div id="gate-debug" class="gate-debug"></div>
+    </div>
+  </div>
+  <div class="pause-overlay" id="pause-overlay">
+    <div class="pause-panel">Input Paused</div>
+  </div>
+
+  <div class="hud">
+    <div class="left">
+      <div>Controller:</div>
+      <div id="status" class="disconnected">Disconnected</div>
+    </div>
+    <div>
+      <div id="gamepad-id">Waiting for input...</div>
+      <div id="debug"></div>
+    </div>
+    <div class="hint">Click Start, then press any button</div>
+    <div class="skin-select">
+      <label for="skin-select">Skin</label>
+      <select id="skin-select">
+        <option value="blue" selected>Blue</option>
+        <option value="shura">Shura</option>
+        <option value="ps5">DualSense</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="stage" id="stage">
+    <div id="controller-scale">
+      <div id="controller" class="controller ds4 disconnected">
+        <div class="triggers">
+          <span class="trigger left"></span>
+          <span class="trigger right"></span>
+          <span class="trigger-button left"></span>
+          <span class="trigger-button right"></span>
+          <span class="clear"></span>
+        </div>
+        <div class="bumpers">
+          <span class="bumper left"></span>
+          <span class="bumper right"></span>
+          <span class="clear"></span>
+        </div>
+        <div class="touchpad"></div>
+        <div class="quadrant"></div>
+        <div class="meta"></div>
+        <div class="arrows">
+          <span class="back"></span>
+          <span class="start"></span>
+          <span class="clear"></span>
+        </div>
+        <div class="abxy">
+          <span class="button a"></span>
+          <span class="button b"></span>
+          <span class="button x"></span>
+          <span class="button y"></span>
+        </div>
+        <div class="sticks">
+          <span class="stick left"></span>
+          <span class="stick right"></span>
+        </div>
+        <div class="wheels">
+          <span class="wheel left"></span>
+          <span class="wheel right"></span>
+        </div>
+        <div class="dpad">
+          <span class="face up"></span>
+          <span class="face down"></span>
+          <span class="face left"></span>
+          <span class="face right"></span>
+        </div>
+        <div class="fstick"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const stage = document.getElementById("stage");
+    const scaler = document.getElementById("controller-scale");
+    const controller = document.getElementById("controller");
+    const statusEl = document.getElementById("status");
+    const idEl = document.getElementById("gamepad-id");
+    const debugEl = document.getElementById("debug");
+    const gate = document.getElementById("gate");
+    const gateDebug = document.getElementById("gate-debug");
+    const startBtn = document.getElementById("start-btn");
+    const skinSelect = document.getElementById("skin-select");
+    const pauseOverlay = document.getElementById("pause-overlay");
+    let paused = false;
+    let maxHeight = null;
+    const canvasPadding = 24;
+
+    const SKIN_CONFIG = {
+      blue: { type: "ds4", width: 806, height: 598, stickMax: 18 },
+      shura: { type: "ds4", width: 806, height: 598, stickMax: 18 },
+      ps5: { type: "ps5", width: 807, height: 651, stickMax: 15 }
+    };
+    const DEFAULT_SKIN = "blue";
+    let baseWidth = SKIN_CONFIG[DEFAULT_SKIN].width;
+    let baseHeight = SKIN_CONFIG[DEFAULT_SKIN].height;
+    let stickMax = SKIN_CONFIG[DEFAULT_SKIN].stickMax;
+
+    function applySkin(nextSkin) {
+      const config = SKIN_CONFIG[nextSkin] || SKIN_CONFIG[DEFAULT_SKIN];
+      const skin = SKIN_CONFIG[nextSkin] ? nextSkin : DEFAULT_SKIN;
+      document.body.dataset.skin = skin;
+      if (skinSelect) skinSelect.value = skin;
+      controller.classList.toggle("ds4", config.type === "ds4");
+      controller.classList.toggle("ps5", config.type === "ps5");
+      baseWidth = config.width;
+      baseHeight = config.height;
+      stickMax = config.stickMax;
+      document.documentElement.style.setProperty("--controller-width", baseWidth + "px");
+      document.documentElement.style.setProperty("--controller-height", baseHeight + "px");
+      resize();
+    }
+
+    if (skinSelect) {
+      const storedSkin = localStorage.getItem("ds4-skin");
+      applySkin(storedSkin);
+      skinSelect.addEventListener("change", () => {
+        const skin = skinSelect.value;
+        applySkin(skin);
+        localStorage.setItem("ds4-skin", skin);
+      });
+    } else {
+      applySkin(DEFAULT_SKIN);
+    }
+
+    const els = {
+      triggerLeft: controller.querySelector(".trigger.left"),
+      triggerRight: controller.querySelector(".trigger.right"),
+      bumperLeft: controller.querySelector(".bumper.left"),
+      bumperRight: controller.querySelector(".bumper.right"),
+      touchpad: controller.querySelector(".touchpad"),
+      meta: controller.querySelector(".meta"),
+      back: controller.querySelector(".back"),
+      start: controller.querySelector(".start"),
+      buttonA: controller.querySelector(".button.a"),
+      buttonB: controller.querySelector(".button.b"),
+      buttonX: controller.querySelector(".button.x"),
+      buttonY: controller.querySelector(".button.y"),
+      dpadUp: controller.querySelector(".face.up"),
+      dpadDown: controller.querySelector(".face.down"),
+      dpadLeft: controller.querySelector(".face.left"),
+      dpadRight: controller.querySelector(".face.right"),
+      stickLeft: controller.querySelector(".stick.left"),
+      stickRight: controller.querySelector(".stick.right")
+    };
+
+    function measureHeight() {
+      const hud = document.querySelector(".hud");
+      const stageEl = document.getElementById("stage");
+      const height = (hud ? hud.offsetHeight : 0) + (stageEl ? stageEl.offsetHeight : 0);
+      return height || document.body.scrollHeight || baseHeight;
+    }
+
+    function postSize() {
+      if (!window.parent || window.parent === window) return;
+      const height = Math.ceil(measureHeight());
+      const targetOrigin = window.location.origin === "null" ? "*" : window.location.origin;
+      window.parent.postMessage({ type: "ds4-visualizer-size", height }, targetOrigin);
+    }
+
+    function resize() {
+      const totalWidth = baseWidth + canvasPadding * 2;
+      const totalHeight = baseHeight + canvasPadding * 2;
+      const stageStyles = window.getComputedStyle(stage);
+      const stagePaddingX = (parseFloat(stageStyles.paddingLeft) || 0) + (parseFloat(stageStyles.paddingRight) || 0);
+      const stagePaddingY = (parseFloat(stageStyles.paddingTop) || 0) + (parseFloat(stageStyles.paddingBottom) || 0);
+      const maxWidth = Math.max(1, stage.clientWidth - stagePaddingX);
+      const shouldCompact = maxWidth < 560 || (typeof maxHeight === "number" && maxHeight < 430);
+      document.body.classList.toggle("compact", shouldCompact);
+      const hudHeight = document.querySelector(".hud")?.offsetHeight || 0;
+      let scale = Math.min(1, maxWidth / totalWidth);
+      if (typeof maxHeight === "number" && maxHeight > 0) {
+        const availableForStage = Math.max(1, maxHeight - hudHeight - stagePaddingY);
+        scale = Math.min(scale, availableForStage / totalHeight);
+      }
+      scaler.style.transform = "scale(" + scale.toFixed(3) + ")";
+      stage.style.height = Math.ceil(totalHeight * scale) + "px";
+      postSize();
+    }
+    window.addEventListener("resize", resize);
+    window.addEventListener("orientationchange", () => setTimeout(resize, 80));
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener("resize", resize);
+    }
+    resize();
+
+    function setPressed(el, pressed) {
+      if (!el) return;
+      el.classList.toggle("pressed", !!pressed);
+      el.classList.toggle("active", !!pressed);
+    }
+
+    function setOpacity(el, value) {
+      if (!el) return;
+      el.style.opacity = Math.max(0, Math.min(1, value)).toFixed(3);
+    }
+
+    function applyDeadzone(v, dz) {
+      const dead = dz || 0.08;
+      if (Math.abs(v) < dead) return 0;
+      return v;
+    }
+
+    function resetVisuals() {
+      setOpacity(els.triggerLeft, 0);
+      setOpacity(els.triggerRight, 0);
+      [
+        els.bumperLeft, els.bumperRight, els.touchpad, els.meta, els.back,
+        els.start, els.buttonA, els.buttonB, els.buttonX, els.buttonY,
+        els.dpadUp, els.dpadDown, els.dpadLeft, els.dpadRight,
+        els.stickLeft, els.stickRight
+      ].forEach(el => setPressed(el, false));
+      if (els.stickLeft) els.stickLeft.style.transform = "translate(0px, 0px)";
+      if (els.stickRight) els.stickRight.style.transform = "translate(0px, 0px)";
+    }
+
+    function setPaused(next) {
+      paused = !!next;
+      if (pauseOverlay) pauseOverlay.classList.toggle("active", paused);
+    }
+
+    window.addEventListener("message", (event) => {
+      const data = event.data || {};
+      if (data && data.type === "ds4-visualizer-pause") {
+        setPaused(!!data.paused);
+      }
+      if (data && data.type === "ds4-visualizer-maxHeight") {
+        const nextMaxHeight = Math.max(1, Math.floor(Number(data.maxHeight) || 0));
+        if (Math.abs(nextMaxHeight - (maxHeight || 0)) >= 2) {
+          maxHeight = nextMaxHeight;
+          resize();
+        }
+      }
+    });
+
+    function setConnected(connected, gp) {
+      controller.classList.toggle("disconnected", !connected);
+      statusEl.textContent = connected ? "Connected" : "Disconnected";
+      statusEl.classList.toggle("connected", connected);
+      statusEl.classList.toggle("disconnected", !connected);
+      idEl.textContent = connected && gp ? gp.id : "Waiting for input...";
+      if (!connected) resetVisuals();
+    }
+
+    function updateDebug(pads) {
+      const api = !!navigator.getGamepads;
+      const secure = window.isSecureContext ? "secure" : "insecure";
+      const connected = pads ? pads.filter(p => p && p.connected).length : 0;
+      const text = "API: " + (api ? "yes" : "no") + " | " + secure + " | pads: " + connected;
+      if (debugEl) debugEl.textContent = text;
+      if (gateDebug) gateDebug.textContent = text;
+    }
+
+    if (!navigator.getGamepads) {
+      statusEl.textContent = "Unsupported";
+      statusEl.classList.add("disconnected");
+      idEl.textContent = "Gamepad API not available in this browser.";
+    }
+
+    let activeIndex = null;
+    let started = false;
+
+    window.addEventListener("gamepadconnected", (e) => {
+      activeIndex = e.gamepad.index;
+    });
+    window.addEventListener("gamepaddisconnected", (e) => {
+      if (activeIndex === e.gamepad.index) activeIndex = null;
+    });
+
+    function tick() {
+      if (paused) {
+        requestAnimationFrame(tick);
+        return;
+      }
+      const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+      updateDebug(pads);
+      let gp = null;
+
+      if (activeIndex !== null && pads[activeIndex] && pads[activeIndex].connected) {
+        gp = pads[activeIndex];
+      } else {
+        for (let i = 0; i < pads.length; i++) {
+          if (pads[i] && pads[i].connected) {
+            gp = pads[i];
+            activeIndex = i;
+            break;
+          }
+        }
+      }
+
+      if (gp) {
+        setConnected(true, gp);
+        const b = gp.buttons || [];
+        setPressed(els.buttonA, b[0] && b[0].pressed);
+        setPressed(els.buttonB, b[1] && b[1].pressed);
+        setPressed(els.buttonX, b[2] && b[2].pressed);
+        setPressed(els.buttonY, b[3] && b[3].pressed);
+
+        setPressed(els.bumperLeft, b[4] && b[4].pressed);
+        setPressed(els.bumperRight, b[5] && b[5].pressed);
+
+        setOpacity(els.triggerLeft, b[6] ? b[6].value : 0);
+        setOpacity(els.triggerRight, b[7] ? b[7].value : 0);
+
+        setPressed(els.back, b[8] && b[8].pressed);
+        setPressed(els.start, b[9] && b[9].pressed);
+
+        setPressed(els.stickLeft, b[10] && b[10].pressed);
+        setPressed(els.stickRight, b[11] && b[11].pressed);
+
+        setPressed(els.dpadUp, b[12] && b[12].pressed);
+        setPressed(els.dpadDown, b[13] && b[13].pressed);
+        setPressed(els.dpadLeft, b[14] && b[14].pressed);
+        setPressed(els.dpadRight, b[15] && b[15].pressed);
+
+        setPressed(els.meta, b[16] && b[16].pressed);
+        if (b[17]) setPressed(els.touchpad, b[17].pressed);
+
+        const axes = gp.axes || [];
+        const lx = applyDeadzone(axes[0] || 0);
+        const ly = applyDeadzone(axes[1] || 0);
+        const rx = applyDeadzone(axes[2] || 0);
+        const ry = applyDeadzone(axes[3] || 0);
+        const max = stickMax;
+        if (els.stickLeft) {
+          els.stickLeft.style.transform = "translate(" + (lx * max).toFixed(2) + "px, " + (ly * max).toFixed(2) + "px)";
+        }
+        if (els.stickRight) {
+          els.stickRight.style.transform = "translate(" + (rx * max).toFixed(2) + "px, " + (ry * max).toFixed(2) + "px)";
+        }
+      } else {
+        setConnected(false, null);
+      }
+
+      requestAnimationFrame(tick);
+    }
+
+    function start() {
+      if (started) return;
+      started = true;
+      if (gate) gate.style.display = "none";
+      postSize();
+      requestAnimationFrame(tick);
+    }
+
+    startBtn.addEventListener("click", start);
+    window.addEventListener("pointerdown", start, { once: true });
+    updateDebug(navigator.getGamepads ? navigator.getGamepads() : []);
+  </script>
+</body>
+</html>

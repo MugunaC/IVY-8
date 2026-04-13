@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import { Label } from '@/app/components/ui/label';
@@ -36,7 +36,7 @@ import {
 import { ChevronLeft, ChevronRight, Edit, Plus, Trash2, UserCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import type { User } from '@shared/types';
-import { getUsers, addUser, updateUser, removeUser } from '@/app/data/usersRepo';
+import { addUser, queryUsers, updateUser, removeUser } from '@/app/data/usersRepo';
 
 export function UsersTab() {
   const [users, setUsers] = useState<User[]>([]);
@@ -44,6 +44,8 @@ export function UsersTab() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [page, setPage] = useState(1);
+  const [totalUsers, setTotalUsers] = useState(0);
+  const [query, setQuery] = useState('');
   const pageSize = 10;
   const [formData, setFormData] = useState({
     username: '',
@@ -52,9 +54,23 @@ export function UsersTab() {
     password: '',
   });
 
+  const loadUsers = useCallback(async () => {
+    try {
+      const result = await queryUsers({ page, pageSize, q: query.trim() || undefined });
+      setUsers(result.items);
+      setTotalUsers(result.total);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to load users');
+    }
+  }, [page, query]);
+
   useEffect(() => {
     void loadUsers();
-  }, []);
+  }, [loadUsers]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [query]);
 
   useEffect(() => {
     const handleEscape = (event: KeyboardEvent) => {
@@ -66,14 +82,6 @@ export function UsersTab() {
     return () => window.removeEventListener('keydown', handleEscape);
   }, []);
 
-  const loadUsers = async () => {
-    try {
-      setUsers(await getUsers());
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to load users');
-    }
-  };
-
   const handleAddUser = async () => {
     try {
       const updated = await addUser({
@@ -82,9 +90,10 @@ export function UsersTab() {
         role: formData.role,
         password: formData.password,
       });
-      setUsers(updated);
+      setUsers(updated.slice(0, pageSize));
       setIsAddDialogOpen(false);
       setFormData({ username: '', email: '', role: 'user', password: '' });
+      await loadUsers();
       toast.success('User added successfully');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to add user');
@@ -95,14 +104,13 @@ export function UsersTab() {
     if (!editingUser) return;
 
     try {
-      const updated = await updateUser(editingUser.id, {
+      await updateUser(editingUser.id, {
         username: formData.username.trim(),
         email: formData.email.trim() || undefined,
         role: formData.role,
         password: formData.password || undefined,
       });
-
-      setUsers(updated);
+      await loadUsers();
       setIsEditDialogOpen(false);
       setEditingUser(null);
       setFormData({ username: '', email: '', role: 'user', password: '' });
@@ -114,8 +122,8 @@ export function UsersTab() {
 
   const handleDeleteUser = async (userId: string) => {
     try {
-      const updated = await removeUser(userId);
-      setUsers(updated);
+      await removeUser(userId);
+      await loadUsers();
       toast.success('User deleted successfully');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to delete user');
@@ -133,12 +141,10 @@ export function UsersTab() {
     setIsEditDialogOpen(true);
   };
 
-  const totalUsers = users.length;
   const totalPages = Math.max(1, Math.ceil(totalUsers / pageSize));
   const safePage = Math.min(page, totalPages);
-  const startIndex = (safePage - 1) * pageSize;
-  const endIndex = Math.min(startIndex + pageSize, totalUsers);
-  const pageUsers = users.slice(startIndex, endIndex);
+  const startIndex = totalUsers === 0 ? 0 : (safePage - 1) * pageSize;
+  const endIndex = Math.min(startIndex + users.length, totalUsers);
 
   useEffect(() => {
     if (page !== safePage) {
@@ -236,6 +242,13 @@ export function UsersTab() {
             </DialogContent>
           </Dialog>
         </div>
+        <div className="mt-4">
+          <Input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search by username, id, email, or role"
+          />
+        </div>
       </CardHeader>
       <CardContent>
         <div>
@@ -252,7 +265,7 @@ export function UsersTab() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {pageUsers.length === 0 ? (
+              {users.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                     <UserCircle className="size-12 mx-auto mb-2 text-muted-foreground" />
@@ -260,7 +273,7 @@ export function UsersTab() {
                   </TableCell>
                 </TableRow>
               ) : (
-                pageUsers.map((user, index) => (
+                users.map((user, index) => (
                   <TableRow key={user.id}>
                     <TableCell className="text-xs text-muted-foreground">
                       {startIndex + index + 1}

@@ -76,6 +76,27 @@ export interface ActivityLog {
   timestamp: string;
 }
 
+export interface PaginatedResult<T> {
+  items: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+export interface ActivityLogStats {
+  login: number;
+  logout: number;
+  vehicle_selected: number;
+  vehicle_unselected: number;
+  vehicle_resumed: number;
+}
+
+export interface ActivityLogPage extends PaginatedResult<ActivityLog> {
+  stats: ActivityLogStats;
+  availableActions: ActivityAction[];
+}
+
 export interface TelemetryPayload {
   buttons: number[];
   axes: number[];

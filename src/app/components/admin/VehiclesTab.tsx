@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import { Label } from '@/app/components/ui/label';
@@ -41,7 +41,7 @@ import type { User, Vehicle } from '@shared/types';
 import {
   addVehicle,
   assignUsers,
-  getVehicles,
+  queryVehicles,
   removeVehicle,
   updateVehicle,
 } from '@/app/data/vehiclesRepo';
@@ -56,6 +56,9 @@ export function VehiclesTab() {
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
   const [assigningVehicle, setAssigningVehicle] = useState<Vehicle | null>(null);
   const [page, setPage] = useState(1);
+  const [totalVehicles, setTotalVehicles] = useState(0);
+  const [query, setQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<Vehicle['status'] | 'all'>('all');
   const pageSize = 10;
   const [formData, setFormData] = useState({
     model: '',
@@ -65,10 +68,37 @@ export function VehiclesTab() {
     charge: 100,
   });
 
+  const loadVehicles = useCallback(async () => {
+    try {
+      const result = await queryVehicles({
+        page,
+        pageSize,
+        q: query.trim() || undefined,
+        status: statusFilter,
+      });
+      setVehicles(result.items);
+      setTotalVehicles(result.total);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to load vehicles');
+    }
+  }, [page, query, statusFilter]);
+
+  const loadUsers = useCallback(async () => {
+    try {
+      setUsers(await getUsers());
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to load users');
+    }
+  }, []);
+
   useEffect(() => {
     void loadVehicles();
     void loadUsers();
-  }, []);
+  }, [loadUsers, loadVehicles]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [query, statusFilter]);
 
   useEffect(() => {
     const handleEscape = (event: KeyboardEvent) => {
@@ -81,22 +111,6 @@ export function VehiclesTab() {
     return () => window.removeEventListener('keydown', handleEscape);
   }, []);
 
-  const loadVehicles = async () => {
-    try {
-      setVehicles(await getVehicles());
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to load vehicles');
-    }
-  };
-
-  const loadUsers = async () => {
-    try {
-      setUsers(await getUsers());
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to load users');
-    }
-  };
-
   const handleAddVehicle = async () => {
     const newVehicle: Vehicle = {
       id: `VH-${String(vehicles.length + 1).padStart(3, '0')}`,
@@ -108,8 +122,8 @@ export function VehiclesTab() {
       charge: formData.charge,
     };
 
-    const updated = await addVehicle(newVehicle);
-    setVehicles(updated);
+    await addVehicle(newVehicle);
+    await loadVehicles();
     setIsAddDialogOpen(false);
     resetForm();
     toast.success('Vehicle added successfully');
@@ -118,7 +132,7 @@ export function VehiclesTab() {
   const handleEditVehicle = async () => {
     if (!editingVehicle) return;
 
-    const updated = await updateVehicle(editingVehicle.id, {
+    await updateVehicle(editingVehicle.id, {
       model: formData.model,
       status: formData.status,
       condition: formData.condition,
@@ -126,7 +140,7 @@ export function VehiclesTab() {
       charge: formData.charge,
     });
 
-    setVehicles(updated);
+    await loadVehicles();
     setIsEditDialogOpen(false);
     setEditingVehicle(null);
     resetForm();
@@ -134,16 +148,16 @@ export function VehiclesTab() {
   };
 
   const handleDeleteVehicle = async (vehicleId: string) => {
-    const updated = await removeVehicle(vehicleId);
-    setVehicles(updated);
+    await removeVehicle(vehicleId);
+    await loadVehicles();
     toast.success('Vehicle deleted successfully');
   };
 
   const handleAssignUsers = async (selectedUserIds: string[]) => {
     if (!assigningVehicle) return;
 
-    const updated = await assignUsers(assigningVehicle.id, selectedUserIds);
-    setVehicles(updated);
+    await assignUsers(assigningVehicle.id, selectedUserIds);
+    await loadVehicles();
     setIsAssignDialogOpen(false);
     setAssigningVehicle(null);
     toast.success('Vehicle assignments updated');
@@ -176,12 +190,10 @@ export function VehiclesTab() {
     });
   };
 
-  const totalVehicles = vehicles.length;
   const totalPages = Math.max(1, Math.ceil(totalVehicles / pageSize));
   const safePage = Math.min(page, totalPages);
-  const startIndex = (safePage - 1) * pageSize;
-  const endIndex = Math.min(startIndex + pageSize, totalVehicles);
-  const pageVehicles = vehicles.slice(startIndex, endIndex);
+  const startIndex = totalVehicles === 0 ? 0 : (safePage - 1) * pageSize;
+  const endIndex = Math.min(startIndex + vehicles.length, totalVehicles);
 
   useEffect(() => {
     if (page !== safePage) {
@@ -313,6 +325,24 @@ export function VehiclesTab() {
             </DialogContent>
           </Dialog>
         </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_220px]">
+          <Input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search by id, model, status, location, or operator"
+          />
+          <Select value={statusFilter} onValueChange={(value: Vehicle['status'] | 'all') => setStatusFilter(value)}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All statuses</SelectItem>
+              <SelectItem value="available">Available</SelectItem>
+              <SelectItem value="unavailable">Unavailable</SelectItem>
+              <SelectItem value="maintenance">Maintenance</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </CardHeader>
       <CardContent>
         <div>
@@ -332,7 +362,7 @@ export function VehiclesTab() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {pageVehicles.length === 0 ? (
+                {vehicles.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={10} className="py-10 text-center text-muted-foreground">
                       <Car className="mx-auto mb-2 size-12 text-muted-foreground" />
@@ -340,7 +370,7 @@ export function VehiclesTab() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  pageVehicles.map((vehicle, index) => (
+                  vehicles.map((vehicle, index) => (
                     <TableRow key={vehicle.id}>
                       <TableCell className="text-xs text-muted-foreground">
                         {startIndex + index + 1}

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/app/components/ui/button';
 import {
   Card,
@@ -22,37 +22,54 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/app/components/ui/select';
+import { Input } from '@/app/components/ui/input';
 import { ChevronLeft, ChevronRight, FileText, Filter, RefreshCw, Settings, Trash2 } from 'lucide-react';
-import type { ActivityLog } from '@shared/types';
-import { clearLogs, getLogs } from '@/app/data/logsRepo';
+import type { ActivityLog, ActivityLogStats } from '@shared/types';
+import { clearLogs, queryLogs } from '@/app/data/logsRepo';
 
 export function LogsTab() {
   const [logs, setLogs] = useState<ActivityLog[]>([]);
+  const [stats, setStats] = useState<ActivityLogStats>({
+    login: 0,
+    logout: 0,
+    vehicle_selected: 0,
+    vehicle_unselected: 0,
+    vehicle_resumed: 0,
+  });
+  const [actionTypes, setActionTypes] = useState<ActivityLog['action'][]>([]);
   const [filterAction, setFilterAction] = useState<string>('all');
+  const [query, setQuery] = useState('');
   const [showSettings, setShowSettings] = useState(false);
   const [page, setPage] = useState(1);
+  const [totalLogs, setTotalLogs] = useState(0);
   const pageSize = 10;
+
+  const loadLogs = useCallback(async () => {
+    const result = await queryLogs({
+      page,
+      pageSize,
+      action: filterAction as ActivityLog['action'] | 'all',
+      q: query.trim() || undefined,
+    });
+    setLogs(result.items);
+    setStats(result.stats);
+    setActionTypes(result.availableActions);
+    setTotalLogs(result.total);
+  }, [filterAction, page, query]);
 
   useEffect(() => {
     void loadLogs();
-  }, []);
+  }, [loadLogs]);
 
   useEffect(() => {
     setPage(1);
-  }, [filterAction]);
-
-  const loadLogs = async () => {
-    const parsedLogs = await getLogs();
-    parsedLogs.sort(
-      (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-    );
-    setLogs(parsedLogs);
-  };
+  }, [filterAction, query]);
 
   const handleClearLogs = async () => {
     if (confirm('Are you sure you want to clear all logs? This action cannot be undone.')) {
       await clearLogs();
       setLogs([]);
+      setTotalLogs(0);
     }
   };
 
@@ -76,18 +93,10 @@ export function LogsTab() {
     );
   };
 
-  const filteredLogs =
-    filterAction === 'all'
-      ? logs
-      : logs.filter((log) => log.action === filterAction);
-
-  const actionTypes = Array.from(new Set(logs.map((log) => log.action)));
-  const totalLogs = filteredLogs.length;
   const totalPages = Math.max(1, Math.ceil(totalLogs / pageSize));
   const safePage = Math.min(page, totalPages);
-  const startIndex = (safePage - 1) * pageSize;
-  const endIndex = Math.min(startIndex + pageSize, totalLogs);
-  const pageLogs = filteredLogs.slice(startIndex, endIndex);
+  const startIndex = totalLogs === 0 ? 0 : (safePage - 1) * pageSize;
+  const endIndex = Math.min(startIndex + logs.length, totalLogs);
 
   useEffect(() => {
     if (page !== safePage) {
@@ -136,10 +145,18 @@ export function LogsTab() {
                   </span>
                   <span className="sr-only">Filters</span>
                 </div>
-                <div className="mt-3 grid grid-cols-1 gap-3 overflow-hidden max-h-0 group-hover:max-h-[220px] transition-all duration-300">
-                  <div className="space-y-2">
-                    <div className="text-xs text-muted-foreground">Filter by Action</div>
-                    <Select value={filterAction} onValueChange={setFilterAction}>
+              <div className="mt-3 grid grid-cols-1 gap-3 overflow-hidden max-h-0 group-hover:max-h-[220px] transition-all duration-300">
+                <div className="space-y-2">
+                  <div className="text-xs text-muted-foreground">Search</div>
+                  <Input
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                    placeholder="Search user, action, or details"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <div className="text-xs text-muted-foreground">Filter by Action</div>
+                  <Select value={filterAction} onValueChange={setFilterAction}>
                       <SelectTrigger className="w-full">
                         <SelectValue />
                       </SelectTrigger>
@@ -172,7 +189,7 @@ export function LogsTab() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {pageLogs.length === 0 ? (
+                {logs.length === 0 ? (
                   <TableRow>
                     <TableCell
                       colSpan={7}
@@ -183,7 +200,7 @@ export function LogsTab() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  pageLogs.map((log, index) => (
+                  logs.map((log, index) => (
                     <TableRow key={log.id}>
                       <TableCell className="text-xs text-muted-foreground">
                         {startIndex + index + 1}
@@ -235,13 +252,13 @@ export function LogsTab() {
             <div className="app-panel-muted p-4">
               <div className="text-sm font-medium text-emerald-700 dark:text-emerald-300">Logins</div>
               <div className="text-2xl font-bold text-emerald-700 dark:text-emerald-300">
-                {logs.filter((log) => log.action === 'login').length}
+                {stats.login}
               </div>
             </div>
             <div className="app-panel-muted p-4">
               <div className="text-sm font-medium text-rose-700 dark:text-rose-300">Logouts</div>
               <div className="text-2xl font-bold text-rose-700 dark:text-rose-300">
-                {logs.filter((log) => log.action === 'logout').length}
+                {stats.logout}
               </div>
             </div>
             <div className="app-panel-muted p-4">
@@ -249,7 +266,7 @@ export function LogsTab() {
                 Vehicles Selected
               </div>
               <div className="text-2xl font-bold text-sky-700 dark:text-sky-300">
-                {logs.filter((log) => log.action === 'vehicle_selected').length}
+                {stats.vehicle_selected}
               </div>
             </div>
             <div className="app-panel-muted p-4">
@@ -257,7 +274,7 @@ export function LogsTab() {
                 Vehicles Unselected
               </div>
               <div className="text-2xl font-bold text-violet-700 dark:text-violet-300">
-                {logs.filter((log) => log.action === 'vehicle_unselected').length}
+                {stats.vehicle_unselected}
               </div>
             </div>
           </div>

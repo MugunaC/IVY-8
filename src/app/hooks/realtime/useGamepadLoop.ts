@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { clientMessageSchema } from '@shared/protocol';
 import type { MissionPlan, TelemetryPayload } from '@shared/types';
+import { normalizeAxis, normalizeButton, hasStateChanged } from '@/app/components/realtime/control/controlMath';
 
 interface UseGamepadLoopOptions {
   vehicleId: string;
@@ -25,6 +26,7 @@ interface UseGamepadLoopOptions {
   telemetryCountRef: React.MutableRefObject<number>;
   lastPayloadRef: React.MutableRefObject<TelemetryPayload | null>;
   telemetryPauseUntilRef?: React.MutableRefObject<number>;
+  inputBlockedRef?: React.MutableRefObject<boolean>;
   onGamepadConnectionChange: (connected: boolean) => void;
   onEnqueueTelemetry: (payload: TelemetryPayload) => void;
   onRequestAutoMode: () => void;
@@ -34,34 +36,12 @@ interface UseGamepadLoopOptions {
   setPendingMission: (mission: MissionPlan | null) => void;
   setMissionPrompt: (state: 'none' | 'select' | 'confirm') => void;
   setSelectedMissionId: (id: string | null) => void;
+  onGamepadSample?: (sample: { gamepad: Gamepad; buttons: number[]; axes: number[]; now: number }) => void;
+  onLeaseMissing?: () => void;
 }
 
-const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
-const normalizeAxis = (value: number) => {
-  const num = Number(value);
-  if (Number.isNaN(num)) return 0;
-  return clamp(num, -1, 1);
-};
-const normalizeButton = (value: number) => {
-  const num = Number(value);
-  if (Number.isNaN(num)) return 0;
-  return clamp(num, 0, 1);
-};
-const ANALOG_EPS = 0.01;
-
-const hasStateChanged = (prev: TelemetryPayload | null, next: TelemetryPayload) => {
-  if (!prev) return true;
-  if (prev.buttons.length !== next.buttons.length || prev.axes.length !== next.axes.length) {
-    return true;
-  }
-  for (let i = 0; i < prev.buttons.length; i += 1) {
-    if (Math.abs(prev.buttons[i] - next.buttons[i]) > ANALOG_EPS) return true;
-  }
-  for (let i = 0; i < prev.axes.length; i += 1) {
-    if (Math.abs(prev.axes[i] - next.axes[i]) > ANALOG_EPS) return true;
-  }
-  return false;
-};
+const MANUAL_CONTROL_INTERVAL_MS = 50;
+const AUTO_HEARTBEAT_MS = 1000;
 
 export function useGamepadLoop(options: UseGamepadLoopOptions) {
   const {
@@ -87,6 +67,7 @@ export function useGamepadLoop(options: UseGamepadLoopOptions) {
     telemetryCountRef,
     lastPayloadRef,
     telemetryPauseUntilRef,
+    inputBlockedRef,
     onGamepadConnectionChange,
     onEnqueueTelemetry,
     onRequestAutoMode,
@@ -96,10 +77,13 @@ export function useGamepadLoop(options: UseGamepadLoopOptions) {
     setPendingMission,
     setMissionPrompt,
     setSelectedMissionId,
+    onGamepadSample,
+    onLeaseMissing,
   } = options;
 
   const animationFrameId = useRef<number>();
   const connectionRef = useRef(false);
+  const lastManualControlSentRef = useRef(0);
 
   useEffect(() => {
     const pollGamepad = () => {
@@ -113,6 +97,7 @@ export function useGamepadLoop(options: UseGamepadLoopOptions) {
           onGamepadConnectionChange(false);
         }
         lastPayloadRef.current = null;
+        lastManualControlSentRef.current = 0;
         animationFrameId.current = requestAnimationFrame(pollGamepad);
         return;
       }
@@ -138,6 +123,7 @@ export function useGamepadLoop(options: UseGamepadLoopOptions) {
         vehicleId,
         leaseId: undefined,
       };
+      const now = Date.now();
 
       const pauseUntil = telemetryPauseUntilRef?.current ?? 0;
       if (Date.now() < pauseUntil) {
@@ -148,7 +134,12 @@ export function useGamepadLoop(options: UseGamepadLoopOptions) {
         return;
       }
 
-      if (hasStateChanged(lastPayloadRef.current, payload)) {
+      onGamepadSample?.({ gamepad, buttons, axes, now });
+
+      const inputBlocked = inputBlockedRef?.current ?? false;
+      const stateChanged = hasStateChanged(lastPayloadRef.current, payload);
+
+      if (!inputBlocked && stateChanged) {
         const nextSeq = telemetryCountRef.current + 1;
         const payloadWithSeq: TelemetryPayload = { ...payload, seq: nextSeq };
         lastPayloadRef.current = payload;
@@ -169,24 +160,25 @@ export function useGamepadLoop(options: UseGamepadLoopOptions) {
       if (activeLeaseId && controlWsRef.current?.readyState === WebSocket.OPEN) {
         const activeMode = driveModeRef.current;
         if (activeMode === 'manual') {
-          const message = clientMessageSchema.safeParse({
-            type: 'control',
-            vehicleId,
-            payload: {
-              seq: controlSeqRef.current++,
-              leaseId: activeLeaseId,
-              buttons,
-              axes,
-              mode: 'manual',
-            },
-          });
-          if (message.success) {
-            controlWsRef.current.send(JSON.stringify(message.data));
+          if (!inputBlocked && (stateChanged || now - lastManualControlSentRef.current >= MANUAL_CONTROL_INTERVAL_MS)) {
+            lastManualControlSentRef.current = now;
+            const message = clientMessageSchema.safeParse({
+              type: 'control',
+              vehicleId,
+              payload: {
+                seq: controlSeqRef.current++,
+                leaseId: activeLeaseId,
+                buttons,
+                axes,
+                mode: 'manual',
+              },
+            });
+            if (message.success) {
+              controlWsRef.current.send(JSON.stringify(message.data));
+            }
           }
         } else {
-          const AUTO_HEARTBEAT_MS = 1000;
-          const now = Date.now();
-          if (now - lastAutoControlSentRef.current >= AUTO_HEARTBEAT_MS) {
+          if (!inputBlocked && now - lastAutoControlSentRef.current >= AUTO_HEARTBEAT_MS) {
             lastAutoControlSentRef.current = now;
             const message = clientMessageSchema.safeParse({
               type: 'control',
@@ -204,6 +196,8 @@ export function useGamepadLoop(options: UseGamepadLoopOptions) {
             }
           }
         }
+      } else if (!activeLeaseId && stateChanged) {
+        onLeaseMissing?.();
       }
 
       if (modeRising) {
@@ -236,40 +230,6 @@ export function useGamepadLoop(options: UseGamepadLoopOptions) {
       prevModeButtonRef.current = modePressed;
       prevConfirmButtonRef.current = confirmPressed;
       prevCancelButtonRef.current = cancelPressed;
-
-      const dpadRight = buttons[15] > 0.5;
-      const dpadLeft = buttons[14] > 0.5;
-      const dpadDir = dpadRight ? 1 : dpadLeft ? -1 : 0;
-      if (missionPromptRef.current !== 'none' && dpadDir !== 0) {
-        const nowMs = Date.now();
-        if (nowMs - lastMissionAxisSwitchRef.current > 250 && dpadDir !== prevMissionAxisRef.current) {
-          const saved = missionsRef.current;
-          const draft = draftMissionRef.current;
-          const choices = [...(draft ? [draft] : []), ...saved];
-          if (choices.length) {
-            const currentId =
-              selectedMissionIdRef.current ||
-              (activeMissionIdRef.current &&
-                choices.some((entry) => entry.id === activeMissionIdRef.current)
-                ? activeMissionIdRef.current
-                : '');
-            const currentIndex = currentId ? choices.findIndex((entry) => entry.id === currentId) : -1;
-            const nextIndex =
-              currentIndex >= 0 ? (currentIndex + dpadDir + choices.length) % choices.length : 0;
-            const nextMission = choices[nextIndex] || null;
-            if (nextMission) {
-              setSelectedMissionId(nextMission.id);
-              setPendingMission(nextMission);
-              setMissionPrompt('confirm');
-            }
-          }
-          lastMissionAxisSwitchRef.current = nowMs;
-          prevMissionAxisRef.current = dpadDir;
-        }
-      }
-      if (dpadDir === 0) {
-        prevMissionAxisRef.current = 0;
-      }
 
       animationFrameId.current = requestAnimationFrame(pollGamepad);
     };
@@ -320,9 +280,12 @@ export function useGamepadLoop(options: UseGamepadLoopOptions) {
     setSelectedMissionId,
     telemetryCountRef,
     telemetryPauseUntilRef,
+    inputBlockedRef,
     userId,
     vehicleId,
     controlWsRef,
     telemetryWsRef,
+    onGamepadSample,
+    onLeaseMissing,
   ]);
 }

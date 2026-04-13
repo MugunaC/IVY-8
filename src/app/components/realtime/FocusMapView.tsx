@@ -1,10 +1,13 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router';
 import { useAuth } from '@/app/context/AuthContext';
 import { useVehicleLocationFeed } from '@/app/hooks/useVehicleLocationFeed';
 import { usePresence } from '@/app/hooks/usePresence';
 import { useCoopSession } from '@/app/hooks/useCoopSession';
+import { useControllerIndicators } from '@/app/hooks/realtime/useControllerIndicators';
+import { useControllerSession } from '@/app/hooks/realtime/useControllerSession';
 import { useControlSocket } from '@/app/hooks/realtime/useControlSocket';
+import { useFocusMapRoutingWeather } from '@/app/hooks/realtime/useFocusMapRoutingWeather';
 import { useGamepadLoop } from '@/app/hooks/realtime/useGamepadLoop';
 import { useTelemetrySocket } from '@/app/hooks/realtime/useTelemetrySocket';
 import { useDebouncedValue } from '@/app/hooks/useDebouncedValue';
@@ -26,42 +29,45 @@ import {
   updateMissionRoute,
   updateMission,
 } from '@/app/data/missionsRepo';
-import { getVehicles, markVehicleInUse } from '@/app/data/vehiclesRepo';
 import { clientMessageSchema } from '@shared/protocol';
 import type { MissionPathType, MissionPlan, MissionWaypoint, TelemetryPayload, Vehicle, WsServerMessage } from '@shared/types';
 import {
-  Bot,
-  Car,
   ChevronLeft,
   ChevronRight,
-  Cloud,
-  CloudDrizzle,
-  CloudFog,
-  CloudLightning,
-  CloudRain,
-  CloudSnow,
-  Compass,
   ChevronDown,
-  Flag,
   Layers,
   Plus,
   RotateCcw,
-  Search,
-  Sun,
   Trash2,
   SlidersHorizontal,
   Minimize2,
   Maximize2,
   Shuffle,
   Wifi,
-  Gamepad2,
   X,
 } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
-import { Input } from '@/app/components/ui/input';
 import { OverlayModal } from '@/app/components/ui/overlay-modal';
 import { CoopChatDock } from '@/app/components/realtime/CoopChatDock';
-import { GoogleMapsLocationIcon } from '@/app/components/realtime/GoogleMapsLocationIcon';
+import { RealtimeIndicatorsRow } from '@/app/components/realtime/control/RealtimeIndicatorsRow';
+import { FocusMapFloatingControls } from '@/app/components/realtime/focus/FocusMapFloatingControls';
+import { FocusMapMissionOverlay } from '@/app/components/realtime/focus/FocusMapMissionOverlay';
+import { FocusMapSearchOverlay } from '@/app/components/realtime/focus/FocusMapSearchOverlay';
+import { FocusMapStatusBar } from '@/app/components/realtime/focus/FocusMapStatusBar';
+import {
+  computeRouteDistance,
+  formatCoordValue,
+  formatEta,
+  formatMeters,
+  formatStepInstruction,
+  formatWaypointPreview,
+  haversineDistance,
+  headingToCompass,
+  type InstructionLocale,
+  MAP_THEMES,
+  resolveInstructionLocale,
+  round,
+} from '@/app/components/realtime/focus/focusMapUtils';
 import { MissionPlannerTabs } from '@/app/components/realtime/MissionPlannerTabs';
 import {
   buildMissionPayloadFromPlan,
@@ -79,428 +85,7 @@ const VideoPanel = lazy(async () => {
   return { default: mod.VideoPanel };
 });
 
-type IndicatorProps = {
-  deviceOnline: boolean;
-  gamepadConnected: boolean;
-  driveMode: 'manual' | 'auto';
-  onDeviceClick: () => void;
-  onControllerClick: () => void;
-  onAutoClick: () => void;
-};
-
-function IndicatorButton({
-  title,
-  onClick,
-  children,
-}: {
-  title: string;
-  onClick: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      title={title}
-      className="flex items-center gap-2 rounded-full border border-border/70 bg-card px-2.5 py-1 transition hover:border-border hover:bg-card/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
-    >
-      {children}
-    </button>
-  );
-}
-
-function IndicatorsRow(props: IndicatorProps) {
-  const { deviceOnline, gamepadConnected, driveMode, onDeviceClick, onControllerClick, onAutoClick } = props;
-  return (
-    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-      <IndicatorButton title="Device status" onClick={onDeviceClick}>
-        <Car
-          className={`size-4 ${
-            deviceOnline ? 'text-emerald-500 drop-shadow-[0_0_6px_rgba(16,185,129,0.6)]' : 'text-slate-400'
-          }`}
-        />
-      </IndicatorButton>
-      <IndicatorButton title="Controller status" onClick={onControllerClick}>
-        <Gamepad2
-          className={`size-4 ${
-            gamepadConnected
-              ? 'text-emerald-500 drop-shadow-[0_0_6px_rgba(16,185,129,0.6)]'
-              : 'text-slate-400'
-          }`}
-        />
-      </IndicatorButton>
-      <IndicatorButton title={driveMode === 'auto' ? 'Auto mode active' : 'Manual mode'} onClick={onAutoClick}>
-        <Bot
-          className={`size-4 ${
-            driveMode === 'auto'
-              ? 'text-emerald-400 drop-shadow-[0_0_8px_rgba(16,185,129,0.75)]'
-              : 'text-slate-400'
-          }`}
-          aria-hidden="true"
-        />
-      </IndicatorButton>
-    </div>
-  );
-}
-
 const VISUALIZER_MIN_HEIGHT = 380;
-const MAP_THEMES: Array<{ key: string; label: string; style: maplibregl.StyleSpecification }> = [
-  {
-    key: 'topo',
-    label: 'Topo',
-    style: {
-      version: 8,
-      sources: {
-        topo: {
-          type: 'raster',
-          tiles: [
-            'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
-          ],
-          tileSize: 256,
-          minzoom: 0,
-          maxzoom: 20,
-          attribution: 'Tiles (c) Esri',
-        },
-      },
-      layers: [{ id: 'topo-base', type: 'raster', source: 'topo' }],
-    },
-  },
-  {
-    key: 'streets',
-    label: 'Streets',
-    style: {
-      version: 8,
-      sources: {
-        streets: {
-          type: 'raster',
-          tiles: [
-            'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
-          ],
-          tileSize: 256,
-          minzoom: 0,
-          maxzoom: 20,
-          attribution: 'Tiles (c) Esri',
-        },
-      },
-      layers: [{ id: 'streets-base', type: 'raster', source: 'streets' }],
-    },
-  },
-  {
-    key: 'imagery',
-    label: 'Imagery',
-    style: {
-      version: 8,
-      sources: {
-        imagery: {
-          type: 'raster',
-          tiles: [
-            'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-          ],
-          tileSize: 256,
-          minzoom: 0,
-          maxzoom: 20,
-          attribution: 'Tiles (c) Esri',
-        },
-      },
-      layers: [{ id: 'imagery-base', type: 'raster', source: 'imagery' }],
-    },
-  },
-  {
-    key: 'gray',
-    label: 'Gray',
-    style: {
-      version: 8,
-      sources: {
-        gray: {
-          type: 'raster',
-          tiles: [
-            'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}',
-          ],
-          tileSize: 256,
-          minzoom: 0,
-          maxzoom: 20,
-          attribution: 'Tiles (c) Esri',
-        },
-      },
-      layers: [{ id: 'gray-base', type: 'raster', source: 'gray' }],
-    },
-  },
-  {
-    key: 'dark-gray',
-    label: 'Dark Gray',
-    style: {
-      version: 8,
-      sources: {
-        darkGray: {
-          type: 'raster',
-          tiles: [
-            'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
-          ],
-          tileSize: 256,
-          minzoom: 0,
-          maxzoom: 20,
-          attribution: 'Tiles (c) Esri',
-        },
-      },
-      layers: [{ id: 'dark-gray-base', type: 'raster', source: 'darkGray' }],
-    },
-  },
-  {
-    key: 'terrain',
-    label: 'Terrain',
-    style: {
-      version: 8,
-      sources: {
-        terrain: {
-          type: 'raster',
-          tiles: [
-            'https://server.arcgisonline.com/ArcGIS/rest/services/World_Terrain_Base/MapServer/tile/{z}/{y}/{x}',
-          ],
-          tileSize: 256,
-          minzoom: 0,
-          maxzoom: 13,
-          attribution: 'Tiles (c) Esri',
-        },
-      },
-      layers: [{ id: 'terrain-base', type: 'raster', source: 'terrain' }],
-    },
-  },
-  {
-    key: 'ocean',
-    label: 'Ocean',
-    style: {
-      version: 8,
-      sources: {
-        ocean: {
-          type: 'raster',
-          tiles: [
-            'https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}',
-          ],
-          tileSize: 256,
-          minzoom: 0,
-          maxzoom: 20,
-          attribution: 'Tiles (c) Esri',
-        },
-      },
-      layers: [{ id: 'ocean-base', type: 'raster', source: 'ocean' }],
-    },
-  },
-];
-
-const round = (value: number, decimals: number) => {
-  const factor = Math.pow(10, decimals);
-  return Math.round(value * factor) / factor;
-};
-
-const OSRM_URL = import.meta.env.VITE_OSRM_URL || import.meta.env.VITE_ROUTING_URL;
-const WEATHER_URL = import.meta.env.VITE_WEATHER_URL;
-
-type OsrmManeuver = {
-  type?: string;
-  modifier?: string;
-  exit?: number;
-};
-
-type OsrmStep = {
-  name?: string;
-  distance?: number;
-  duration?: number;
-  maneuver?: OsrmManeuver;
-};
-
-type RouteAlternative = {
-  coordinates: [number, number][];
-  distance: number;
-  duration: number;
-  steps: OsrmStep[];
-};
-
-type InstructionLocale = 'en' | 'sw';
-
-const resolveInstructionLocale = (): InstructionLocale => {
-  const lang =
-    typeof navigator !== 'undefined' && navigator.language ? navigator.language.toLowerCase() : 'en';
-  if (lang.startsWith('sw')) return 'sw';
-  return 'en';
-};
-
-const toRad = (value: number) => (value * Math.PI) / 180;
-const haversineDistance = (a: MissionWaypoint, b: MissionWaypoint) => {
-  const r = 6371000;
-  const dLat = toRad(b.lat - a.lat);
-  const dLng = toRad(b.lng - a.lng);
-  const lat1 = toRad(a.lat);
-  const lat2 = toRad(b.lat);
-  const h =
-    Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
-  return 2 * r * Math.asin(Math.sqrt(h));
-};
-
-const computeRouteDistance = (coords: [number, number][]) => {
-  if (coords.length < 2) return 0;
-  let sum = 0;
-  for (let i = 1; i < coords.length; i += 1) {
-    const a: MissionWaypoint = { lng: coords[i - 1][0], lat: coords[i - 1][1] };
-    const b: MissionWaypoint = { lng: coords[i][0], lat: coords[i][1] };
-    sum += haversineDistance(a, b);
-  }
-  return sum;
-};
-
-const formatMeters = (value: number) => {
-  if (!Number.isFinite(value)) return '--';
-  if (value >= 1000) return `${(value / 1000).toFixed(2)} km`;
-  return `${Math.round(value)} m`;
-};
-
-const formatEta = (value: number) => {
-  if (!Number.isFinite(value) || value <= 0) return '--';
-  const totalSeconds = Math.round(value);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  if (minutes >= 60) {
-    const hours = Math.floor(minutes / 60);
-    const mins = minutes % 60;
-    return `${hours}h ${mins}m`;
-  }
-  return `${minutes}m ${seconds}s`;
-};
-
-const headingToCompass = (heading: number | undefined) => {
-  if (typeof heading !== 'number' || Number.isNaN(heading)) return '--';
-  const directions = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
-  const index = Math.round(((heading % 360) + 360) / 45) % 8;
-  return directions[index];
-};
-
-const formatCoordValue = (value: number | undefined) => {
-  if (typeof value !== 'number' || Number.isNaN(value)) return '--';
-  return value.toFixed(6);
-};
-
-const formatStepInstruction = (step: OsrmStep, locale: InstructionLocale) => {
-  const maneuver = step.maneuver;
-  const name = step.name ? step.name.trim() : '';
-  const rawType = maneuver?.type ? maneuver.type.replace(/_/g, ' ').toLowerCase().trim() : '';
-  const rawModifier = maneuver?.modifier ? maneuver.modifier.replace(/_/g, ' ').toLowerCase().trim() : '';
-
-  const t =
-    locale === 'sw'
-      ? {
-          depart: 'Anza',
-          departOn: (road: string) => (road ? `Anza kwenye ${road}` : 'Anza'),
-          arrive: 'Fika kwenye kituo',
-          roundabout: (exit?: number) =>
-            exit ? `Ingiza kwenye mzunguko na chukua kutoka ${exit}` : 'Ingiza kwenye mzunguko',
-          exitRoundabout: 'Toka kwenye mzunguko',
-          continue: 'Endelea',
-          continueOn: (road: string) => (road ? `Endelea kwenye ${road}` : 'Endelea'),
-          turn: (dir: string) => (dir ? `Geuka ${dir}` : 'Geuka'),
-          turnOnto: (dir: string, road: string) =>
-            road ? `Geuka ${dir} kwenye ${road}` : `Geuka ${dir}`,
-          keep: (dir: string) => (dir ? `Kaa ${dir}` : 'Kaa kulia'),
-          merge: (road: string) => (road ? `Ungana na ${road}` : 'Ungana'),
-          onRamp: (road: string) => (road ? `Panda njia ya kuingia ${road}` : 'Panda njia ya kuingia'),
-          offRamp: (road: string) => (road ? `Shuka kwenye njia ya kutoka ${road}` : 'Shuka kwenye njia ya kutoka'),
-          endOfRoad: (dir: string) => (dir ? `Geuka ${dir} mwisho wa barabara` : 'Geuka mwisho wa barabara'),
-          uturn: 'Geuka U',
-          straight: 'moja kwa moja',
-          left: 'kushoto',
-          right: 'kulia',
-          slightLeft: 'kidogo kushoto',
-          slightRight: 'kidogo kulia',
-          sharpLeft: 'kali kushoto',
-          sharpRight: 'kali kulia',
-        }
-      : {
-          depart: 'Depart',
-          departOn: (road: string) => (road ? `Depart onto ${road}` : 'Depart'),
-          arrive: 'Arrive at destination',
-          roundabout: (exit?: number) =>
-            exit ? `Enter roundabout and take exit ${exit}` : 'Enter roundabout',
-          exitRoundabout: 'Exit roundabout',
-          continue: 'Continue',
-          continueOn: (road: string) => (road ? `Continue on ${road}` : 'Continue'),
-          turn: (dir: string) => (dir ? `Turn ${dir}` : 'Turn'),
-          turnOnto: (dir: string, road: string) =>
-            road ? `Turn ${dir} onto ${road}` : `Turn ${dir}`,
-          keep: (dir: string) => (dir ? `Keep ${dir}` : 'Keep right'),
-          merge: (road: string) => (road ? `Merge onto ${road}` : 'Merge'),
-          onRamp: (road: string) => (road ? `Take the ramp onto ${road}` : 'Take the ramp'),
-          offRamp: (road: string) => (road ? `Take the exit toward ${road}` : 'Take the exit'),
-          endOfRoad: (dir: string) => (dir ? `Turn ${dir} at end of road` : 'Turn at end of road'),
-          uturn: 'Make a U-turn',
-          straight: 'straight',
-          left: 'left',
-          right: 'right',
-          slightLeft: 'slight left',
-          slightRight: 'slight right',
-          sharpLeft: 'sharp left',
-          sharpRight: 'sharp right',
-        };
-
-  const modifierLabel = (() => {
-    switch (rawModifier) {
-      case 'uturn':
-      case 'u-turn':
-        return t.uturn;
-      case 'straight':
-        return t.straight;
-      case 'left':
-        return t.left;
-      case 'right':
-        return t.right;
-      case 'slight left':
-        return t.slightLeft;
-      case 'slight right':
-        return t.slightRight;
-      case 'sharp left':
-        return t.sharpLeft;
-      case 'sharp right':
-        return t.sharpRight;
-      default:
-        return rawModifier || '';
-    }
-  })();
-
-  switch (rawType) {
-    case 'depart':
-      return name ? t.departOn(name) : t.depart;
-    case 'arrive':
-      return t.arrive;
-    case 'roundabout':
-    case 'rotary':
-      return t.roundabout(maneuver?.exit);
-    case 'exit roundabout':
-    case 'exit rotary':
-      return t.exitRoundabout;
-    case 'new name':
-      return t.continueOn(name);
-    case 'merge':
-      return t.merge(name);
-    case 'on ramp':
-      return t.onRamp(name);
-    case 'off ramp':
-      return t.offRamp(name);
-    case 'fork':
-      return t.keep(modifierLabel);
-    case 'end of road':
-      return t.endOfRoad(modifierLabel);
-    case 'continue':
-      return t.continueOn(name || modifierLabel);
-    case 'roundabout turn':
-      return modifierLabel ? t.turn(modifierLabel) : t.turn('');
-    case 'turn':
-    default:
-      if (modifierLabel && name) return t.turnOnto(modifierLabel, name);
-      if (modifierLabel) return t.turn(modifierLabel);
-      if (name) return t.continueOn(name);
-      return t.continue;
-  }
-};
-
-const formatWaypointPreview = (lat: number, lng: number) => `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-
 function OpsPanelFallback(props: { title: string }) {
   return (
     <section className="rounded-xl border border-border bg-card p-4">
@@ -540,9 +125,7 @@ export function FocusMapView() {
     vehicleId,
   });
   const [isGamepadConnected, setIsGamepadConnected] = useState(false);
-  const [syncedGamepadConnected, setSyncedGamepadConnected] = useState(false);
   const [telemetryCount, setTelemetryCount] = useState(0);
-  const [syncedInputWsConnected, setSyncedInputWsConnected] = useState(false);
   const [syncedTelemetryCount, setSyncedTelemetryCount] = useState(0);
   const debouncedTelemetryCount = useDebouncedValue(telemetryCount, 750);
   const [visualizerHeight, setVisualizerHeight] = useState(700);
@@ -578,28 +161,15 @@ export function FocusMapView() {
     null
   );
   const [routeFocusSignal, setRouteFocusSignal] = useState(0);
-  const [routeAlternatives, setRouteAlternatives] = useState<RouteAlternative[]>([]);
-  const [selectedRouteIndex, setSelectedRouteIndex] = useState(0);
-  const [routeSteps, setRouteSteps] = useState<OsrmStep[]>([]);
-  const [hoveredRouteIndex, setHoveredRouteIndex] = useState<number | null>(null);
   const [missionDistance, setMissionDistance] = useState(0);
   const [missionEta, setMissionEta] = useState(0);
   const [missions, setMissions] = useState<MissionPlan[]>([]);
-  const [selectedMissionId, setSelectedMissionId] = useState<string | null>(null);
   const [missionName, setMissionName] = useState('New Mission');
   const [draftMission, setDraftMission] = useState<MissionPlan | null>(null);
-  const [pendingMission, setPendingMission] = useState<MissionPlan | null>(null);
-  const [missionPrompt, setMissionPrompt] = useState<'none' | 'select' | 'confirm'>('none');
   const [missionActionFocus, setMissionActionFocus] = useState<'confirm' | 'cancel'>('confirm');
-  const [activeMissionId, setActiveMissionId] = useState<string | null>(null);
-  const [routingStatus, setRoutingStatus] = useState<string | null>(null);
   const [missionSaveStatus, setMissionSaveStatus] = useState<string | null>(null);
   const [manualLat, setManualLat] = useState('');
   const [manualLng, setManualLng] = useState('');
-  const [weatherSummary, setWeatherSummary] = useState<string>('');
-  const [weatherUnavailableReason, setWeatherUnavailableReason] = useState<string>('');
-  const [weatherCode, setWeatherCode] = useState<number | null>(null);
-  const [deviceOnline, setDeviceOnline] = useState(false);
   const [deviceStatus, setDeviceStatus] = useState<{
     online: boolean;
     lastSeenMs: number;
@@ -609,23 +179,12 @@ export function FocusMapView() {
   }>({ online: false, lastSeenMs: 0 });
   const [deviceOverlayOpen, setDeviceOverlayOpen] = useState(false);
   const [controllerOverlayOpen, setControllerOverlayOpen] = useState(false);
-  const [controllerInfo, setControllerInfo] = useState<{ id: string; mapping?: string; battery?: number | null }>({
-    id: 'Unknown',
-  });
   const [vehicleInfo, setVehicleInfo] = useState<Vehicle | null>(null);
-  const [driveMode, setDriveMode] = useState<'manual' | 'auto'>(
-    presence.driveMode || 'manual'
-  );
-  const [controlLeaseId, setControlLeaseId] = useState<string | null>(
-    presence.controlLeaseId ?? null
-  );
   const lastPayloadRef = useRef<TelemetryPayload | null>(null);
   const telemetryCountRef = useRef(0);
   const visualizerRef = useRef<HTMLIFrameElement | null>(null);
   const visualizerContainerRef = useRef<HTMLDivElement | null>(null);
   const maxVisualizerHeightRef = useRef(0);
-  const lastWeatherFetchRef = useRef(0);
-  const selectedRouteIndexRef = useRef(0);
   const telemetryPauseUntilRef = useRef(0);
   const controlWsUrl = useMemo(() => getDefaultControlWsUrl({ includeOverride: true }), []);
   const telemetryWsUrl = useMemo(() => getDefaultTelemetryWsUrl(controlWsUrl), [controlWsUrl]);
@@ -674,26 +233,97 @@ export function FocusMapView() {
       }
     },
   });
-  const driveModeRef = useRef<'manual' | 'auto'>(driveMode);
+  const {
+    driveMode,
+    setDriveMode,
+    controlLeaseId,
+    selectedMissionId,
+    setSelectedMissionId,
+    pendingMission,
+    setPendingMission,
+    missionPrompt,
+    setMissionPrompt,
+    activeMissionId,
+    setActiveMissionId,
+    driveModeRef,
+    missionPromptRef,
+    pendingMissionRef,
+    selectedMissionIdRef,
+    activeMissionIdRef,
+    draftMissionRef,
+    controlSeqRef,
+    lastAutoControlSentRef,
+    controlLeaseIdRef,
+  } = useControllerSession({
+    vehicleId,
+    user,
+    isSpectatorSession,
+    isPresenceOwner,
+    presence,
+    updatePresence,
+    initialDriveMode: presence.driveMode || 'manual',
+    initialControlLeaseId: presence.controlLeaseId ?? null,
+    onVehicleHydrated: setVehicleInfo,
+  });
+  const {
+    deviceOnline,
+    setDeviceOnline,
+    controllerInfo,
+    setSyncedGamepadConnected,
+    syncedGamepadConnected,
+    setSyncedControlWsConnected,
+    syncedControlWsConnected,
+  } = useControllerIndicators({
+    presence,
+    isPresenceOwner,
+    updatePresence,
+    mirrorToPresence: true,
+  });
   const prevModeButtonRef = useRef(false);
   const prevConfirmButtonRef = useRef(false);
   const prevCancelButtonRef = useRef(false);
   const prevMissionAxisRef = useRef(0);
   const lastMissionAxisSwitchRef = useRef(0);
-  const missionPromptRef = useRef<'none' | 'select' | 'confirm'>('none');
-  const pendingMissionRef = useRef<MissionPlan | null>(null);
   const missionsRef = useRef<MissionPlan[]>([]);
-  const selectedMissionIdRef = useRef<string | null>(null);
-  const activeMissionIdRef = useRef<string | null>(null);
-  const draftMissionRef = useRef<MissionPlan | null>(null);
-  const controlSeqRef = useRef(0);
-  const lastAutoControlSentRef = useRef(0);
-  const controlLeaseIdRef = useRef<string | null>(null);
+
+  const triggerRouteFocus = useCallback(() => {
+    if (isFocusMap) {
+      setFollowVehicleMap(false);
+    }
+    setRouteFocusSignal((prev) => prev + 1);
+  }, [isFocusMap]);
 
   const debouncedWaypoints = useDebouncedValue(missionWaypoints, 250);
   const debouncedPathType = useDebouncedValue(missionPathType, 250);
   const debouncedProfile = useDebouncedValue(missionProfile, 250);
   const debouncedSpeed = useDebouncedValue(missionSpeedMps, 250);
+  const {
+    routeAlternatives,
+    setRouteAlternatives,
+    selectedRouteIndex,
+    setSelectedRouteIndex,
+    selectedRouteIndexRef,
+    routeSteps,
+    setRouteSteps,
+    hoveredRouteIndex,
+    setHoveredRouteIndex,
+    routingStatus,
+    weatherStatusLabel,
+    weatherIcon,
+    handleSelectRoute,
+  } = useFocusMapRoutingWeather({
+    waypoints: debouncedWaypoints,
+    pathType: debouncedPathType,
+    profile: debouncedProfile,
+    speedMps: debouncedSpeed,
+    latestLocation: locationFeed.latest,
+    onRouteResolved: (route, distance, eta) => {
+      setMissionRoute(route);
+      setMissionDistance(distance);
+      setMissionEta(eta);
+    },
+    onRouteFocus: triggerRouteFocus,
+  });
   const mapRouteAlternatives = useMemo(
     () =>
       routeAlternatives.map((entry) => ({
@@ -709,22 +339,6 @@ export function FocusMapView() {
     }, 250);
     return () => window.clearInterval(flush);
   }, []);
-
-  useEffect(() => {
-    selectedRouteIndexRef.current = selectedRouteIndex;
-  }, [selectedRouteIndex]);
-
-  useEffect(() => {
-    driveModeRef.current = driveMode;
-    updatePresence({ driveMode });
-  }, [driveMode, updatePresence]);
-
-  const triggerRouteFocus = useCallback(() => {
-    if (isFocusMap) {
-      setFollowVehicleMap(false);
-    }
-    setRouteFocusSignal((prev) => prev + 1);
-  }, [isFocusMap]);
 
   const parseLatLng = useCallback((input: string) => {
     const cleaned = input.trim();
@@ -815,40 +429,6 @@ export function FocusMapView() {
     setTbtOpacity(next);
   }, [tbtOpacity]);
 
-
-  useEffect(() => {
-    if (isPresenceOwner) return;
-    if (presence.driveMode && presence.driveMode !== driveMode) {
-      setDriveMode(presence.driveMode);
-    }
-  }, [presence.driveMode, driveMode, isPresenceOwner]);
-
-  useEffect(() => {
-    controlLeaseIdRef.current = controlLeaseId;
-  }, [controlLeaseId]);
-
-  useEffect(() => {
-    updatePresence({ controlLeaseId });
-  }, [controlLeaseId, updatePresence]);
-
-  useEffect(() => {
-    if (isPresenceOwner) return;
-    if (presence.controlLeaseId !== undefined && presence.controlLeaseId !== controlLeaseId) {
-      setControlLeaseId(presence.controlLeaseId ?? null);
-    }
-  }, [presence.controlLeaseId, controlLeaseId, isPresenceOwner]);
-
-  useEffect(() => {
-    if (isPresenceOwner) return;
-    if (presence.deviceOnline !== undefined && presence.deviceOnline !== deviceOnline) {
-      setDeviceOnline(presence.deviceOnline);
-    }
-  }, [presence.deviceOnline, deviceOnline, isPresenceOwner]);
-
-  useEffect(() => {
-    updatePresence({ deviceOnline });
-  }, [deviceOnline, updatePresence]);
-
   useEffect(() => {
     if (!isFocusedDisplay) {
       updatePresence({ gamepadConnected: isGamepadConnected });
@@ -857,51 +437,11 @@ export function FocusMapView() {
   }, [isGamepadConnected, isFocusedDisplay, updatePresence]);
 
   useEffect(() => {
-    if (isPresenceOwner) return;
-    if (presence.gamepadConnected !== undefined) {
-      setSyncedGamepadConnected(presence.gamepadConnected);
-    }
-  }, [presence.gamepadConnected, isPresenceOwner]);
-
-  useEffect(() => {
-    const readControllerInfo = () => {
-      const pads = navigator.getGamepads ? navigator.getGamepads() : [];
-      const pad =
-        Array.from(pads).find((item): item is Gamepad => Boolean(item && item.connected)) || null;
-      if (!pad) {
-        setControllerInfo({ id: 'Unknown' });
-        return;
-      }
-      const battery =
-        typeof (pad as unknown as { battery?: { level?: number | null } }).battery?.level === 'number'
-          ? (pad as unknown as { battery?: { level?: number | null } }).battery?.level ?? null
-          : null;
-      setControllerInfo({
-        id: pad.id || 'Gamepad',
-        mapping: pad.mapping,
-        battery,
-      });
-    };
-    readControllerInfo();
-    const interval = window.setInterval(readControllerInfo, 1000);
-    return () => {
-      window.clearInterval(interval);
-    };
-  }, [isGamepadConnected]);
-
-  useEffect(() => {
     if (!isFocusedDisplay) {
       updatePresence({ controlWsConnected: isTelemetryWsConnected });
-      setSyncedInputWsConnected(isTelemetryWsConnected);
+      setSyncedControlWsConnected(isTelemetryWsConnected);
     }
   }, [isTelemetryWsConnected, isFocusedDisplay, updatePresence]);
-
-  useEffect(() => {
-    if (isPresenceOwner) return;
-    if (presence.controlWsConnected !== undefined) {
-      setSyncedInputWsConnected(presence.controlWsConnected);
-    }
-  }, [presence.controlWsConnected, isPresenceOwner]);
 
   useEffect(() => {
     const key = STORAGE_KEYS.telemetryCount(vehicleId);
@@ -930,62 +470,18 @@ export function FocusMapView() {
   }, [vehicleId, wsRef]);
 
   useEffect(() => {
-    missionPromptRef.current = missionPrompt;
-  }, [missionPrompt]);
-
-  useEffect(() => {
     if (!perfEnabled) return;
     const elapsed = performance.now() - renderStart;
     console.info(`[Perf][render][FocusMapView] ${elapsed.toFixed(1)}ms`);
   });
 
   useEffect(() => {
-    pendingMissionRef.current = pendingMission;
-  }, [pendingMission]);
-
-  useEffect(() => {
     missionsRef.current = missions;
   }, [missions]);
 
   useEffect(() => {
-    selectedMissionIdRef.current = selectedMissionId;
-  }, [selectedMissionId]);
-
-  useEffect(() => {
-    activeMissionIdRef.current = activeMissionId;
-  }, [activeMissionId]);
-
-  useEffect(() => {
     draftMissionRef.current = draftMission;
   }, [draftMission]);
-
-  useEffect(() => {
-    if (!vehicleId || !user || isSpectatorSession) return;
-    let cancelled = false;
-    const hydrateLease = async () => {
-      try {
-        const vehicles = await getVehicles();
-        const match = vehicles.find((item) => item.id === vehicleId);
-        if (cancelled) return;
-        setVehicleInfo(match ?? null);
-        setControlLeaseId(match?.controlLeaseId ?? null);
-        if (!match?.controlLeaseId) {
-          const updated = await markVehicleInUse(vehicleId, user.username, user.id);
-          if (cancelled) return;
-          const next = updated.find((item) => item.id === vehicleId);
-          setControlLeaseId(next?.controlLeaseId ?? null);
-        }
-      } catch (error) {
-        if (!cancelled) {
-          console.warn('Failed to hydrate control lease:', error);
-        }
-      }
-    };
-    void hydrateLease();
-    return () => {
-      cancelled = true;
-    };
-  }, [isSpectatorSession, vehicleId, user]);
 
   useEffect(() => {
     let mounted = true;
@@ -1194,7 +690,7 @@ export function FocusMapView() {
     [planningEnabled]
   );
 
-  const handleManualAdd = () => {
+  const handleManualAdd = useCallback(() => {
     const lat = Number(manualLat);
     const lng = Number(manualLng);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
@@ -1211,198 +707,7 @@ export function FocusMapView() {
     ]);
     setManualLat('');
     setManualLng('');
-  };
-
-  useEffect(() => {
-    const coords = debouncedWaypoints.map((point) => [point.lng, point.lat] as [number, number]);
-    if (coords.length < 2) {
-      setMissionRoute(null);
-      setMissionDistance(0);
-      setMissionEta(0);
-      setRoutingStatus(null);
-      return;
-    }
-    const effectivePathType = debouncedProfile === 'drone' ? 'straight' : debouncedPathType;
-    if (debouncedProfile === 'drone' && debouncedPathType === 'roads') {
-      setRoutingStatus('Drone profile uses straight-line routing.');
-    }
-    if (effectivePathType === 'straight' || !OSRM_URL) {
-      if (effectivePathType === 'roads' && !OSRM_URL) {
-        setRoutingStatus('OSRM URL not configured, using straight-line path.');
-      } else if (effectivePathType !== 'straight') {
-        setRoutingStatus(null);
-      } else if (debouncedProfile !== 'drone') {
-        setRoutingStatus(null);
-      }
-      const distance = computeRouteDistance(coords);
-      setMissionRoute({ type: 'LineString', coordinates: coords });
-      setRouteAlternatives([]);
-      setSelectedRouteIndex(0);
-      setRouteSteps([]);
-      setHoveredRouteIndex(null);
-      setMissionDistance(distance);
-      setMissionEta(debouncedSpeed > 0 ? distance / debouncedSpeed : 0);
-      return;
-    }
-
-    let cancelled = false;
-    const buildRoutingUrl = (points: [number, number][]) => {
-      if (!OSRM_URL) return null;
-      const joined = points.map((item) => `${item[0]},${item[1]}`).join(';');
-      const base = OSRM_URL.replace(/\/+$/, '');
-      const prefix = base.includes('route/v1') ? base : `${base}/route/v1/driving`;
-      return `${prefix}/${joined}?overview=full&geometries=geojson&steps=true&alternatives=true`;
-    };
-
-    const fetchRoute = async () => {
-      const url = buildRoutingUrl(coords);
-      if (!url) {
-        return;
-      }
-      setRoutingStatus('Fetching road route...');
-      try {
-        const response = await fetch(url);
-        if (!response.ok) {
-          throw new Error(`Routing failed (${response.status})`);
-        }
-        const data = (await response.json()) as {
-          routes?: Array<{
-            geometry?: { coordinates?: [number, number][] };
-            distance?: number;
-            duration?: number;
-            legs?: Array<{ steps?: OsrmStep[] }>;
-          }>;
-        };
-        if (cancelled) return;
-        const routes =
-          data.routes?.map((route) => {
-            const routeCoords = route.geometry?.coordinates || coords;
-            const distance = route.distance ?? computeRouteDistance(routeCoords);
-            const duration =
-              route.duration ?? (debouncedSpeed > 0 ? distance / debouncedSpeed : 0);
-            const steps =
-              route.legs?.flatMap((leg) => leg.steps || []) ?? [];
-            return { coordinates: routeCoords, distance, duration, steps };
-          }) ?? [];
-
-        if (!routes.length) {
-          const distance = computeRouteDistance(coords);
-          setMissionRoute({ type: 'LineString', coordinates: coords });
-          setRouteAlternatives([]);
-          setSelectedRouteIndex(0);
-          setRouteSteps([]);
-          setHoveredRouteIndex(null);
-          setMissionDistance(distance);
-          setMissionEta(debouncedSpeed > 0 ? distance / debouncedSpeed : 0);
-          setRoutingStatus('Routing response returned no routes. Using straight-line path.');
-          return;
-        }
-
-        const nextIndex = Math.min(selectedRouteIndexRef.current, routes.length - 1);
-        const selected = routes[nextIndex];
-        setRouteAlternatives(routes);
-        setSelectedRouteIndex(nextIndex);
-        setMissionRoute({ type: 'LineString' as const, coordinates: selected.coordinates });
-        setRouteSteps(selected.steps);
-        setHoveredRouteIndex(null);
-        setMissionDistance(selected.distance);
-        setMissionEta(selected.duration);
-        setRoutingStatus(null);
-      } catch (error) {
-        if (cancelled) return;
-        const distance = computeRouteDistance(coords);
-        setMissionRoute({ type: 'LineString', coordinates: coords });
-        setRouteAlternatives([]);
-        setSelectedRouteIndex(0);
-        setRouteSteps([]);
-        setHoveredRouteIndex(null);
-        setMissionDistance(distance);
-        setMissionEta(debouncedSpeed > 0 ? distance / debouncedSpeed : 0);
-        setRoutingStatus(
-          error instanceof Error ? `${error.message}. Using straight-line path.` : 'Routing failed. Using straight-line path.'
-        );
-      }
-    };
-
-    void fetchRoute();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [debouncedPathType, debouncedProfile, debouncedSpeed, debouncedWaypoints]);
-
-  useEffect(() => {
-    if (!WEATHER_URL) {
-      setWeatherSummary('');
-      setWeatherUnavailableReason('Weather API not configured');
-      setWeatherCode(null);
-      return;
-    }
-    const latest = locationFeed.latest;
-    if (!latest) {
-      setWeatherSummary('');
-      setWeatherUnavailableReason('Waiting for GPS fix');
-      setWeatherCode(null);
-      return;
-    }
-    const now = Date.now();
-    if (now - lastWeatherFetchRef.current < 60_000) {
-      return;
-    }
-    lastWeatherFetchRef.current = now;
-    setWeatherUnavailableReason('');
-    const lat = latest.lat;
-    const lng = latest.lng;
-    const buildWeatherUrl = () => {
-      if (WEATHER_URL.includes('{lat}') || WEATHER_URL.includes('{lng}')) {
-        return WEATHER_URL.replace('{lat}', String(lat)).replace('{lng}', String(lng));
-      }
-      const separator = WEATHER_URL.includes('?') ? '&' : '?';
-      return `${WEATHER_URL}${separator}lat=${lat}&lng=${lng}`;
-    };
-    const controller = new AbortController();
-    const fetchWeather = async () => {
-      try {
-        const response = await fetch(buildWeatherUrl(), { signal: controller.signal });
-        if (!response.ok) {
-          setWeatherSummary('');
-          setWeatherUnavailableReason('Weather service error');
-          return;
-        }
-        const data = (await response.json()) as {
-          current_weather?: { temperature?: number; windspeed?: number; weathercode?: number };
-          temperature?: number;
-          wind_speed?: number;
-          summary?: string;
-        };
-        const temp = data.current_weather?.temperature ?? data.temperature ?? undefined;
-        const wind = data.current_weather?.windspeed ?? data.wind_speed ?? undefined;
-        const code =
-          typeof data.current_weather?.weathercode === 'number' ? data.current_weather.weathercode : null;
-        const summary =
-          data.summary ||
-          (temp !== undefined ? `${temp}°C` : '') +
-            (wind !== undefined ? ` • wind ${wind} m/s` : '');
-        if (summary) {
-          setWeatherSummary(summary);
-          setWeatherUnavailableReason('');
-          setWeatherCode(code);
-        } else {
-          setWeatherSummary('');
-          setWeatherUnavailableReason('Weather data missing');
-          setWeatherCode(code);
-        }
-      } catch {
-        if (!controller.signal.aborted) {
-          setWeatherSummary('');
-          setWeatherUnavailableReason('Weather request failed');
-          setWeatherCode(null);
-        }
-      }
-    };
-    void fetchWeather();
-    return () => controller.abort();
-  }, [locationFeed.latest]);
+  }, [manualLat, manualLng]);
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
@@ -1513,21 +818,72 @@ export function FocusMapView() {
 
   const currentStep = routeSteps[currentStepIndex];
   const nextStep = routeSteps[currentStepIndex + 1];
-  const weatherStatusLabel =
-    weatherSummary ||
-    (weatherUnavailableReason ? `Unavailable: ${weatherUnavailableReason}` : 'Unavailable');
   const lastSeenLabel = deviceStatus.lastSeenMs
     ? new Date(deviceStatus.lastSeenMs).toLocaleString()
     : 'n/a';
   const shouldShowMissionOverlay = missionPrompt !== 'none';
   const displayGamepadConnected = isFocusedDisplay ? syncedGamepadConnected : isGamepadConnected;
-  const displayInputWsConnected = isFocusedDisplay ? syncedInputWsConnected : isTelemetryWsConnected;
+  const displayInputWsConnected = isFocusedDisplay ? syncedControlWsConnected : isTelemetryWsConnected;
   const displayTelemetryCount = isFocusedDisplay ? syncedTelemetryCount : telemetryCount;
+  const missionListRef = useRef<HTMLDivElement | null>(null);
+  const prevMissionScrollDirRef = useRef(0);
+  const lastMissionScrollRef = useRef(0);
+  const scrollMissionList = useCallback((direction: -1 | 1) => {
+    missionListRef.current?.scrollBy({
+      top: direction * 64,
+      behavior: 'smooth',
+    });
+  }, []);
+
   useEffect(() => {
     if (missionPrompt === 'confirm') {
       setMissionActionFocus('confirm');
     }
   }, [missionPrompt]);
+
+  useEffect(() => {
+    if (missionPrompt !== 'select') return;
+    missionListRef.current?.focus();
+  }, [missionPrompt]);
+
+  useEffect(() => {
+    if (missionPrompt !== 'select') return;
+    const handleMissionListKey = (event: KeyboardEvent) => {
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        scrollMissionList(1);
+        return;
+      }
+      if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        scrollMissionList(-1);
+        return;
+      }
+      if (event.key === 'PageDown') {
+        event.preventDefault();
+        missionListRef.current?.scrollBy({ top: 192, behavior: 'smooth' });
+        return;
+      }
+      if (event.key === 'PageUp') {
+        event.preventDefault();
+        missionListRef.current?.scrollBy({ top: -192, behavior: 'smooth' });
+        return;
+      }
+      if (event.key === 'Home') {
+        event.preventDefault();
+        missionListRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+      if (event.key === 'End') {
+        event.preventDefault();
+        const target = missionListRef.current;
+        target?.scrollTo({ top: target.scrollHeight, behavior: 'smooth' });
+      }
+    };
+    window.addEventListener('keydown', handleMissionListKey);
+    return () => window.removeEventListener('keydown', handleMissionListKey);
+  }, [missionPrompt, scrollMissionList]);
+
   const missionChoices = useMemo(() => {
     const next: MissionPlan[] = [];
     if (draftMission) next.push(draftMission);
@@ -1644,59 +1000,6 @@ export function FocusMapView() {
   }, [handleSetDriveMode]);
 
   useEffect(() => {
-    if (missionPrompt === 'none') return;
-    const handleKey = (event: KeyboardEvent) => {
-      if (event.key === 'ArrowLeft') {
-        event.preventDefault();
-        stepMissionChoice(-1);
-        return;
-      }
-      if (event.key === 'ArrowRight') {
-        event.preventDefault();
-        stepMissionChoice(1);
-        return;
-      }
-      if (event.key === 'Tab' && missionPrompt === 'confirm') {
-        event.preventDefault();
-        setMissionActionFocus((prev) => (prev === 'confirm' ? 'cancel' : 'confirm'));
-        return;
-      }
-      if (event.key === 'Enter') {
-        if (missionPrompt === 'confirm' && pendingMission) {
-          if (missionActionFocus === 'confirm') {
-            confirmMission(pendingMission);
-          } else {
-            cancelMissionPrompt();
-          }
-          return;
-        }
-        if (missionPrompt === 'select') {
-          const selected =
-            (draftMission && selectedMissionId === draftMission.id ? draftMission : null) ||
-            resolveSelectedMission();
-          if (selected) {
-            setPendingMission(selected);
-            setMissionPrompt('confirm');
-            setMissionActionFocus('confirm');
-          }
-        }
-      }
-    };
-    window.addEventListener('keydown', handleKey);
-    return () => window.removeEventListener('keydown', handleKey);
-  }, [
-    missionPrompt,
-    pendingMission,
-    missionActionFocus,
-    draftMission,
-    selectedMissionId,
-    resolveSelectedMission,
-    cancelMissionPrompt,
-    confirmMission,
-    stepMissionChoice,
-  ]);
-
-  useEffect(() => {
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
       setSearchOpen(false);
@@ -1746,35 +1049,31 @@ export function FocusMapView() {
     setPendingMission,
     setMissionPrompt,
     setSelectedMissionId,
+    onGamepadSample: ({ buttons, now }) => {
+      const dpadDown = buttons[13] > 0.5;
+      const dpadUp = buttons[12] > 0.5;
+      const missionScrollDir = dpadDown ? 1 : dpadUp ? -1 : 0;
+      if (missionPromptRef.current === 'select' && missionScrollDir !== 0) {
+        if (
+          now - lastMissionScrollRef.current > 250 &&
+          missionScrollDir !== prevMissionScrollDirRef.current
+        ) {
+          scrollMissionList(missionScrollDir as -1 | 1);
+          lastMissionScrollRef.current = now;
+          prevMissionScrollDirRef.current = missionScrollDir;
+        }
+      }
+      if (missionScrollDir === 0) {
+        prevMissionScrollDirRef.current = 0;
+      }
+    },
   });
 
-  const weatherIcon = useMemo(() => {
-    if (typeof weatherCode !== 'number') return null;
-    // WMO weather interpretation codes (Open-Meteo).
-    if (weatherCode === 0) return <Sun className="size-4 text-amber-400" aria-hidden="true" />;
-    if (weatherCode === 1 || weatherCode === 2) return <Cloud className="size-4 text-slate-300" aria-hidden="true" />;
-    if (weatherCode === 3) return <Cloud className="size-4 text-slate-400" aria-hidden="true" />;
-    if (weatherCode === 45 || weatherCode === 48) return <CloudFog className="size-4 text-slate-400" aria-hidden="true" />;
-    if (weatherCode >= 51 && weatherCode <= 57)
-      return <CloudDrizzle className="size-4 text-sky-300" aria-hidden="true" />;
-    if (weatherCode >= 61 && weatherCode <= 67)
-      return <CloudRain className="size-4 text-sky-400" aria-hidden="true" />;
-    if (weatherCode >= 71 && weatherCode <= 77)
-      return <CloudSnow className="size-4 text-slate-200" aria-hidden="true" />;
-    if (weatherCode >= 80 && weatherCode <= 82)
-      return <CloudRain className="size-4 text-sky-400" aria-hidden="true" />;
-    if (weatherCode >= 85 && weatherCode <= 86)
-      return <CloudSnow className="size-4 text-slate-200" aria-hidden="true" />;
-    if (weatherCode >= 95 && weatherCode <= 99)
-      return <CloudLightning className="size-4 text-amber-300" aria-hidden="true" />;
-    return <Cloud className="size-4 text-slate-300" aria-hidden="true" />;
-  }, [weatherCode]);
-
-  const handleUndoWaypoint = () => {
+  const handleUndoWaypoint = useCallback(() => {
     setMissionWaypoints((prev) => prev.slice(0, -1));
-  };
+  }, []);
 
-  const handleClearWaypoints = () => {
+  const handleClearWaypoints = useCallback(() => {
     setMissionWaypoints([]);
     setMissionRoute(null);
     setRouteAlternatives([]);
@@ -1783,19 +1082,7 @@ export function FocusMapView() {
     setHoveredRouteIndex(null);
     setMissionDistance(0);
     setMissionEta(0);
-  };
-
-  const handleSelectRoute = (index: number) => {
-    const selected = routeAlternatives[index];
-    if (!selected) return;
-    setSelectedRouteIndex(index);
-    selectedRouteIndexRef.current = index;
-    setMissionRoute({ type: 'LineString', coordinates: selected.coordinates });
-    setRouteSteps(selected.steps);
-    setMissionDistance(selected.distance);
-    setMissionEta(selected.duration);
-    triggerRouteFocus();
-  };
+  }, []);
 
   const handleSaveMission = useCallback(async (nameOverride?: string) => {
     setMissionSaveStatus(null);
@@ -1880,7 +1167,7 @@ export function FocusMapView() {
     setSavePromptOpen(false);
   }, [handleSaveMission, savePromptName]);
 
-  const handleDeleteMission = async () => {
+  const handleDeleteMission = useCallback(async () => {
     if (!selectedMissionId) return;
     try {
       const next = await deleteMission(selectedMissionId);
@@ -1893,7 +1180,7 @@ export function FocusMapView() {
       setMissionSaveStatus(`Failed to delete mission. ${message}`);
       console.error('Failed to delete mission', error);
     }
-  };
+  }, [selectedMissionId]);
 
   const missionPlannerProps = useMemo(
     () => ({
@@ -2030,7 +1317,7 @@ export function FocusMapView() {
               >
                 {!isFocusMap && (
                   <header className="mb-3 flex items-center justify-between">
-                    <IndicatorsRow
+                    <RealtimeIndicatorsRow
                       deviceOnline={deviceOnline}
                       gamepadConnected={displayGamepadConnected}
                       driveMode={driveMode}
@@ -2116,55 +1403,18 @@ export function FocusMapView() {
                   />
                 </Suspense>
                 {isFocusMap && (
-                  <div className="pointer-events-none fixed bottom-4 left-1/2 z-40 flex -translate-x-1/2 md:absolute md:bottom-5 md:left-5 md:translate-x-0">
-                    <div className="pointer-events-auto flex max-w-[95vw] items-center gap-3 rounded-full border border-border/[0.02] bg-card/30 px-3 py-2 shadow-lg backdrop-blur-lg">
-                      <IndicatorsRow
-                        deviceOnline={deviceOnline}
-                        gamepadConnected={displayGamepadConnected}
-                        driveMode={driveMode}
-                        onDeviceClick={handleDeviceIndicatorClick}
-                        onControllerClick={handleControllerIndicatorClick}
-                        onAutoClick={handleAutoIndicatorClick}
-                      />
-                      <div className="h-5 w-px bg-border/70" />
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="bg-card/90 backdrop-blur"
-                        onClick={() => setFollowVehicleMap(true)}
-                        title="Follow vehicle"
-                      >
-                        <GoogleMapsLocationIcon className="size-4" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="bg-card/90 backdrop-blur"
-                        onClick={() => setMapThemesOpen(true)}
-                        title="Map themes"
-                      >
-                        <Layers className="size-4" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="bg-card/90 backdrop-blur"
-                        onClick={() => setMissionOverlayOpen(true)}
-                        title="Mission planner"
-                      >
-                        <Flag className="size-4" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="bg-card/90 backdrop-blur"
-                        onClick={() => setSearchOpen(true)}
-                        title="Search location"
-                      >
-                        <Search className="size-4" />
-                      </Button>
-                    </div>
-                  </div>
+                  <FocusMapFloatingControls
+                    deviceOnline={deviceOnline}
+                    gamepadConnected={displayGamepadConnected}
+                    driveMode={driveMode}
+                    onDeviceClick={handleDeviceIndicatorClick}
+                    onControllerClick={handleControllerIndicatorClick}
+                    onAutoClick={handleAutoIndicatorClick}
+                    onFollow={() => setFollowVehicleMap(true)}
+                    onThemes={() => setMapThemesOpen(true)}
+                    onMissionPlanner={() => setMissionOverlayOpen(true)}
+                    onSearch={() => setSearchOpen(true)}
+                  />
                 )}
                 {isFocusMap && !tbtDismissed && routeSteps.length > 0 && currentStep && (
                   <div className="pointer-events-none fixed bottom-24 right-4 z-40 md:bottom-6">
@@ -2249,7 +1499,7 @@ export function FocusMapView() {
             <section className={`space-y-2 ${isFocusedDisplay ? '' : ''}`}>
               <section className={`rounded-xl border border-border bg-card p-4 ${isFocusedDisplay ? 'flex min-h-[calc(100vh-5.75rem)] flex-col' : ''}`}>
                 <header className="mb-3 flex items-center justify-between">
-                  <IndicatorsRow
+                  <RealtimeIndicatorsRow
                     deviceOnline={deviceOnline}
                     gamepadConnected={displayGamepadConnected}
                     driveMode={driveMode}
@@ -2279,7 +1529,7 @@ export function FocusMapView() {
               }`}
             >
               <header className="relative z-20 mb-3 flex items-center justify-between">
-                <IndicatorsRow
+                <RealtimeIndicatorsRow
                   deviceOnline={deviceOnline}
                   gamepadConnected={displayGamepadConnected}
                   driveMode={driveMode}
@@ -2303,60 +1553,26 @@ export function FocusMapView() {
         )}
       </div>
       {isFocusMap && (
-        <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-border/70 bg-card/95 px-4 py-2 backdrop-blur">
-          <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-6 gap-y-2 text-xs text-muted-foreground">
-            <div className="flex items-center gap-2">
-              <span className="font-semibold text-foreground">Latitude</span>
-              <span>{formatCoordValue(latestLocation?.lat)}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="font-semibold text-foreground">Longitude</span>
-              <span>{formatCoordValue(latestLocation?.lng)}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="font-semibold text-foreground">Heading</span>
-              <span>{headingLabel}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Compass className="size-4 text-foreground" aria-hidden="true" />
-              <span className="sr-only">Compass</span>
-              <span>{compassLabel}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="font-semibold text-foreground">Velocity</span>
-              <span>{speedLabel}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="font-semibold text-foreground">Distance</span>
-              <span>{missionDistanceLabel}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="font-semibold text-foreground">ETA</span>
-              <span>{missionEtaLabel}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="font-semibold text-foreground">Weather</span>
-              {weatherIcon}
-              <span>{weatherStatusLabel}</span>
-            </div>
-          </div>
-        </div>
+        <FocusMapStatusBar
+          latitude={formatCoordValue(latestLocation?.lat)}
+          longitude={formatCoordValue(latestLocation?.lng)}
+          heading={headingLabel}
+          compass={compassLabel}
+          speed={speedLabel}
+          distance={missionDistanceLabel}
+          eta={missionEtaLabel}
+          weather={weatherStatusLabel}
+          weatherIcon={weatherIcon}
+        />
       )}
-      {shouldShowMissionOverlay && (
-        <div className="fixed inset-0 z-[180] flex items-center justify-center bg-black/55 px-4 py-8 backdrop-blur-sm">
-          <div className="relative w-full max-w-xl rounded-2xl border border-border bg-card p-5 shadow-2xl">
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={cancelMissionPrompt}
-              className="absolute right-3 top-3"
-              aria-label="Close mission overlay"
-            >
-              <X className="size-4" />
-            </Button>
+      <OverlayModal
+        open={shouldShowMissionOverlay}
+        title={missionPrompt === 'confirm' ? 'Confirm mission' : 'Select a mission'}
+        onClose={cancelMissionPrompt}
+        maxWidthClassName="max-w-xl"
+      >
             {missionPrompt === 'select' && (
               <div className="space-y-4">
-                <div className="text-lg font-semibold">Select a mission</div>
                 <div className="text-sm text-muted-foreground">
                   No mission is active. Create one in Realtime Ops or choose an existing plan before enabling auto mode.
                 </div>
@@ -2370,7 +1586,11 @@ export function FocusMapView() {
                   >
                     <ChevronLeft className="size-4" />
                   </Button>
-                  <div className="max-h-48 overflow-y-auto rounded-lg border border-border/70 bg-muted/20 px-10 py-2 text-sm">
+                  <div
+                    ref={missionListRef}
+                    tabIndex={0}
+                    className="max-h-48 overflow-y-auto rounded-lg border border-border/70 bg-muted/20 px-10 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
                     {missionChoices.length ? (
                       <div className="grid gap-2">
                         {missionChoices.map((entry) => (
@@ -2435,7 +1655,6 @@ export function FocusMapView() {
 
             {missionPrompt === 'confirm' && pendingMission && (
               <div className="space-y-4">
-                <div className="text-lg font-semibold">Confirm mission</div>
                 <div className="relative rounded-lg border border-border/70 bg-muted/30 p-3 text-sm">
                   <Button
                     size="sm"
@@ -2504,9 +1723,7 @@ export function FocusMapView() {
                 </div>
               </div>
             )}
-          </div>
-        </div>
-      )}
+      </OverlayModal>
       {sessionId && (
         <div className="pointer-events-none fixed bottom-4 right-4 z-40">
           <CoopChatDock
@@ -2540,169 +1757,52 @@ export function FocusMapView() {
           ))}
         </div>
       </OverlayModal>
-      <OverlayModal
+      <FocusMapSearchOverlay
         open={searchOpen}
-        title="Search"
+        searchQuery={searchQuery}
+        searchStatus={searchStatus}
+        searchActionsOpen={searchActionsOpen}
+        savePromptOpen={savePromptOpen}
+        savePromptName={savePromptName}
+        missionCanSave={missionCanSave}
+        planningEnabled={planningEnabled}
+        lastSearchCoords={lastSearchCoords}
         onClose={() => {
           setSearchOpen(false);
           setSearchActionsOpen(false);
         }}
-        maxWidthClassName="max-w-md"
-      >
-        <div className="grid gap-3 text-sm">
-          <Input
-            value={searchQuery}
-            onChange={(event) => setSearchQuery(event.target.value)}
-            placeholder="City, landmark, or lat,lng"
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                event.preventDefault();
-                void handleSearchSubmit();
-              }
-            }}
-          />
-          <div className="flex flex-wrap gap-2">
-            <Button size="sm" onClick={() => void handleSearchSubmit()}>
-              <Search className="mr-2 size-4" />
-              Search
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setSearchActionsOpen((prev) => !prev)}
-            >
-              <ChevronDown className="mr-2 size-4" />
-              Route actions
-            </Button>
-          </div>
-          {searchStatus && <div className="text-xs text-muted-foreground">{searchStatus}</div>}
-          {searchActionsOpen && (
-            <div className="grid gap-2 rounded-lg border border-border/70 bg-muted/20 p-3 text-xs">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleAddSearchWaypoint}
-                disabled={!lastSearchCoords || !planningEnabled}
-                title={planningEnabled ? 'Add waypoint at search result' : 'Enable planning to add waypoints'}
-                className="justify-start"
-              >
-                <Flag className="mr-2 size-4" />
-                Add waypoint
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="justify-start"
-                onClick={openSavePrompt}
-                disabled={!missionCanSave}
-                title={missionCanSave ? 'Save route to missions' : 'Add at least 2 waypoints'}
-              >
-                <ChevronRight className="mr-2 size-4" />
-                Save route
-              </Button>
-              {savePromptOpen && (
-                <div className="mt-1 grid gap-2 rounded-md border border-border/70 bg-background/60 p-2">
-                  <div className="text-xs text-muted-foreground">Save route as</div>
-                  <Input
-                    value={savePromptName}
-                    onChange={(event) => setSavePromptName(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter') {
-                        event.preventDefault();
-                        void handleSavePromptConfirm();
-                      }
-                    }}
-                  />
-                  <div className="flex items-center gap-2">
-                    <Button size="sm" onClick={() => void handleSavePromptConfirm()}>
-                      Save
-                    </Button>
-                    <Button size="sm" variant="outline" onClick={() => setSavePromptOpen(false)}>
-                      Cancel
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </OverlayModal>
-      <OverlayModal
+        onSearchQueryChange={setSearchQuery}
+        onSubmit={handleSearchSubmit}
+        onToggleActions={() => setSearchActionsOpen((prev) => !prev)}
+        onAddWaypoint={handleAddSearchWaypoint}
+        onOpenSavePrompt={openSavePrompt}
+        onSavePromptNameChange={setSavePromptName}
+        onSavePromptConfirm={handleSavePromptConfirm}
+        onCloseSavePrompt={() => setSavePromptOpen(false)}
+      />
+      <FocusMapMissionOverlay
         open={missionOverlayOpen}
-        title="Mission"
         onClose={() => {
           setMissionOverlayOpen(false);
           setShowMissionPlanner(false);
         }}
-        maxWidthClassName="max-w-4xl"
-      >
-        <div className="grid gap-3 text-sm">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="text-xs text-muted-foreground">
-              {missionWaypoints.length} waypoints • {missionDistanceLabel} • {missionEtaLabel}
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                size="sm"
-                variant={planningEnabled ? 'default' : 'outline'}
-                onClick={() => setPlanningEnabled(!planningEnabled)}
-              >
-                {planningEnabled ? 'Planning on' : 'Planning off'}
-              </Button>
-              <Button size="sm" variant="outline" onClick={() => setShowMissionPlanner((prev) => !prev)}>
-                <ChevronDown className="mr-2 size-4" />
-                {showMissionPlanner ? 'Hide planner' : 'Show planner'}
-              </Button>
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-2 rounded-lg border border-border/70 bg-muted/20 p-2">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleAddSearchWaypoint}
-              disabled={!lastSearchCoords}
-              title={lastSearchCoords ? 'Add last search location as waypoint' : 'Search first to add'}
-            >
-              <Plus className="mr-2 size-4" />
-              Add last search
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleUndoWaypoint}
-              disabled={!missionWaypoints.length}
-            >
-              <RotateCcw className="mr-2 size-4" />
-              Undo
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleClearWaypoints}
-              disabled={!missionWaypoints.length}
-            >
-              <Trash2 className="mr-2 size-4" />
-              Clear route
-            </Button>
-          </div>
-          <div className="grid gap-2 rounded-lg border border-border/70 bg-muted/20 p-3 text-xs">
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">Path type</span>
-              <span>{missionPathType}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">Profile</span>
-              <span>{missionProfile}</span>
-            </div>
-            {routingStatus && <div className="text-muted-foreground">{routingStatus}</div>}
-          </div>
-          {plannerMounted && (
-            <div className={showMissionPlanner ? 'block' : 'hidden'}>
-              <MissionPlannerTabs {...missionPlannerProps} />
-            </div>
-          )}
-        </div>
-      </OverlayModal>
+        missionWaypointsCount={missionWaypoints.length}
+        missionDistanceLabel={missionDistanceLabel}
+        missionEtaLabel={missionEtaLabel}
+        planningEnabled={planningEnabled}
+        showMissionPlanner={showMissionPlanner}
+        plannerMounted={plannerMounted}
+        missionPathType={missionPathType}
+        missionProfile={missionProfile}
+        routingStatus={routingStatus}
+        lastSearchCoords={lastSearchCoords}
+        onTogglePlanning={() => setPlanningEnabled((prev) => !prev)}
+        onTogglePlanner={() => setShowMissionPlanner((prev) => !prev)}
+        onAddLastSearch={handleAddSearchWaypoint}
+        onUndoWaypoint={handleUndoWaypoint}
+        onClearWaypoints={handleClearWaypoints}
+        plannerProps={missionPlannerProps}
+      />
       <OverlayModal
         open={deviceOverlayOpen}
         title="Device Details"
@@ -2794,5 +1894,7 @@ export function FocusMapView() {
     </main>
   );
 }
+
+
 
 

@@ -8,51 +8,23 @@ import {
   withVehicleCapabilities,
 } from './adapters/vehicleAdapter.js';
 import type {
-  ActivityLog,
-  CoopChatMessage,
-  CoopParticipant,
-  CoopRole,
-  CoopSessionVehicle,
-  CoopSharedRoute,
-  CoopStatePayload,
   CameraStatusPayload,
   CameraControlPayload,
+  CoopRole,
   ControlPayload,
   DeviceHelloPayload,
   MissionPayload,
-  MissionPlan,
-  RecordEntry,
   SensorStatePayload,
   TelemetryEntry,
   TelemetryPayload,
-  User,
   VehicleLocationPayload,
   Vehicle,
   WsServerMessage,
 } from '../shared/types.js';
 import {
   initDb,
-  type StoredUser,
-  listUsers,
-  findUserByIdentifier,
-  insertUser,
-  updateUser,
-  deleteUser,
   listVehicles,
   getVehicle as dbGetVehicle,
-  insertVehicle,
-  updateVehicle as dbUpdateVehicle,
-  deleteVehicle as dbDeleteVehicle,
-  listLogs,
-  addLog,
-  clearLogs,
-  listRecords,
-  addRecord,
-  listMissions,
-  getMissionRoute,
-  setMissionRoute,
-  upsertMission,
-  deleteMission as dbDeleteMission,
   appendTelemetry,
   listTelemetry,
   pruneTelemetry,
@@ -62,13 +34,6 @@ import {
 import {
   ALLOW_LEGACY_INPUT,
   API_PORT,
-  BODY_LIMIT_AUTH,
-  BODY_LIMIT_INPUT,
-  BODY_LIMIT_LOGS,
-  BODY_LIMIT_MISSIONS,
-  BODY_LIMIT_RECORDS,
-  BODY_LIMIT_USERS,
-  BODY_LIMIT_VEHICLES,
   CAMERA_CONTROL_RATE_LIMIT_PER_SEC,
   CONTROL_RATE_BURST,
   CONTROL_RATE_LIMIT_PER_SEC,
@@ -78,8 +43,6 @@ import {
   DEVICE_HEARTBEAT_SCAN_MS,
   DEVICE_HEARTBEAT_TIMEOUT_MS,
   DEVICE_SHARED_SECRET,
-  MAX_LOGS,
-  MAX_RECORDS,
   MAX_TELEMETRY,
   START_API,
   START_WS,
@@ -91,18 +54,21 @@ import {
   TELEMETRY_QUEUE_MAX,
   TELEMETRY_RETENTION_DAYS,
   TELEMETRY_SLOWDOWN_MS,
-  USER_UPDATE_MIN_INTERVAL_MS,
   WS_CONTROL_PORT,
   WS_DEVICE_PORT,
   WS_HOST,
   WS_TELEMETRY_PORT,
   WS_VERBOSE,
 } from './config.js';
-import { hashPassword, verifyPassword } from './lib/auth.js';
-import { parseBody, sendJson, sendText } from './lib/http.js';
+import { sendJson, sendText } from './lib/http.js';
 import { logStructured, logWsVerbose as writeWsVerbose } from './lib/logging.js';
 import { formatPromLines, incMetric, metricKey } from './lib/metrics.js';
 import { consumeRateLimit, type RateLimitState } from './lib/rateLimit.js';
+import { handleAuthRoutes } from './routes/auth.js';
+import { handleAdminRoutes } from './routes/admin.js';
+import { handleMissionRoutes } from './routes/missions.js';
+import { handleTelemetryRoutes } from './routes/telemetry.js';
+import { InMemoryCoopSessionService, type CoopBroadcast } from './services/coopSessions.js';
 
 const BINARY_MAGIC = Buffer.from([0x49, 0x56, 0x59, 0x01]); // "IVY" + version
 const BINARY_MODULE_TELEMETRY = 1;
@@ -112,10 +78,6 @@ interface DeviceRegistryEntry {
   vehicleId: string;
   deviceId: string;
   secret: string;
-}
-
-function nowIso() {
-  return new Date().toISOString();
 }
 
 function logWsVerbose(
@@ -143,60 +105,6 @@ function observeAckLatency(endpoint: string, vehicleId: string | undefined, ms: 
   const bucket = ACK_LATENCY_BUCKETS.find((limit) => ms <= limit) ?? Infinity;
   const bucketKey = metricKey([endpoint, vehicleId, bucket]);
   incMetric(wsAckLatencyBuckets, bucketKey, 1);
-}
-
-function sanitizeUser(user: StoredUser): User {
-  const { passwordHash: _passwordHash, ...rest } = user;
-  return rest;
-}
-
-function sanitizeWaypoints(raw: MissionPlan['waypoints']): MissionPlan['waypoints'] {
-  if (!Array.isArray(raw)) return [];
-  const next: MissionPlan['waypoints'] = [];
-  for (const point of raw) {
-    const lat = Number(point?.lat);
-    const lng = Number(point?.lng);
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
-    if (lat < -90 || lat > 90 || lng < -180 || lng > 180) continue;
-    next.push({
-      lat,
-      lng,
-      label: typeof point?.label === 'string' ? point.label.slice(0, 64) : undefined,
-    });
-  }
-  return next;
-}
-
-function sanitizeRoute(
-  route: MissionPlan['route'] | null | undefined
-): MissionPlan['route'] | undefined {
-  if (!route || route.type !== 'LineString' || !Array.isArray(route.coordinates)) return undefined;
-  const coords: [number, number][] = [];
-  for (const entry of route.coordinates) {
-    if (!Array.isArray(entry) || entry.length < 2) continue;
-    const lng = Number(entry[0]);
-    const lat = Number(entry[1]);
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
-    if (lat < -90 || lat > 90 || lng < -180 || lng > 180) continue;
-    coords.push([lng, lat]);
-  }
-  if (coords.length < 2) return undefined;
-  return { type: 'LineString', coordinates: coords };
-}
-
-function normalizeSearchQuery(value: string | null) {
-  return (value || '').trim().toLowerCase();
-}
-
-function clampSearchLimit(value: string | null, fallback = 50, max = 200) {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
-  return Math.min(max, Math.max(1, Math.floor(parsed)));
-}
-
-function matchesSearch(text: string | undefined, query: string) {
-  if (!query) return true;
-  return (text || '').toLowerCase().includes(query);
 }
 
 const db = initDb();
@@ -267,21 +175,6 @@ const lastDeviceStatusSentMsByVehicle = new Map<string, number>();
 const deviceIpByVehicle = new Map<string, string>();
 const deviceFwByVehicle = new Map<string, string>();
 const deviceIpBySocket = new Map<WebSocket, string>();
-const coopMetaBySocket = new Map<
-  WebSocket,
-  { sessionId: string; vehicleId?: string; userId: string; username: string; role: CoopRole }
->();
-
-type CoopSessionState = {
-  hostUserId?: string;
-  hostUsername?: string;
-  participants: Map<string, CoopParticipant>;
-  sockets: Set<WebSocket>;
-  messages: CoopChatMessage[];
-  sharedRoute?: CoopSharedRoute | null;
-};
-
-const coopSessionById = new Map<string, CoopSessionState>();
 
 const wsMetricsReceived = new Map<string, number>();
 const wsMetricsSent = new Map<string, number>();
@@ -777,18 +670,9 @@ function sendMessage(ws: WebSocket, message: WsServerMessage) {
   incMetric(wsMetricsSent, metricKey([endpoint, vehicleId, message.type]));
 }
 
-function getOrCreateCoopSession(sessionId: string) {
-  const existing = coopSessionById.get(sessionId);
-  if (existing) return existing;
-  const created: CoopSessionState = {
-    participants: new Map(),
-    sockets: new Set(),
-    messages: [],
-    sharedRoute: null,
-  };
-  coopSessionById.set(sessionId, created);
-  return created;
-}
+const locationSubscribers = new Map<WebSocket, string>();
+const latestLocations = new Map<string, VehicleLocationPayload>();
+const inputAckBySocket = new Map<WebSocket, { received: number; lastAckTs: number }>();
 
 function buildInvitePath(sessionId: string, vehicleId?: string) {
   const params = new URLSearchParams();
@@ -799,214 +683,41 @@ function buildInvitePath(sessionId: string, vehicleId?: string) {
   return `/control?${params.toString()}`;
 }
 
-function syncCoopHost(sessionId: string) {
-  const session = coopSessionById.get(sessionId);
-  if (!session) return;
-  let host = [...session.participants.values()].find((entry) => {
+const coopSessions = new InMemoryCoopSessionService<WebSocket>({
+  getInvitePath: buildInvitePath,
+  getVehicleSnapshot: (vehicleId) => {
+    const latest = latestLocations.get(vehicleId);
+    if (!latest) return undefined;
+    return {
+      vehicleId,
+      lat: latest.lat,
+      lng: latest.lng,
+      heading: latest.heading,
+      speedMps: latest.speedMps,
+      lastUpdatedAt: latest.ts,
+    };
+  },
+  resolveHost: (entry) => {
     if (!entry.vehicleId) return false;
     const vehicle = getVehicle(entry.vehicleId);
     return vehicle?.currentUserId === entry.userId || vehicle?.currentUser === entry.username;
-  });
-  if (!host) {
-    host = [...session.participants.values()].sort((a, b) => a.joinedAt - b.joinedAt)[0];
-  }
-  session.hostUserId = host?.userId;
-  session.hostUsername = host?.username;
-  session.participants.forEach((participant, userId) => {
-    const isHost = userId === session.hostUserId;
-    session.participants.set(userId, {
-      ...participant,
-      role: isHost ? 'host' : participant.role === 'host' ? 'driver' : participant.role,
-      isHost,
-    });
-  });
-}
+  },
+  createId: newId,
+  now: () => Date.now(),
+});
 
-function buildCoopVehicles(sessionId: string): CoopSessionVehicle[] {
-  const session = coopSessionById.get(sessionId);
-  if (!session) return [];
-  const vehicles = new Map<string, CoopSessionVehicle>();
-  session.participants.forEach((participant) => {
-    if (!participant.vehicleId) return;
-    const latest = latestLocations.get(participant.vehicleId);
-    vehicles.set(participant.vehicleId, {
-      vehicleId: participant.vehicleId,
-      userId: participant.userId,
-      username: participant.username,
-      lat: latest?.lat,
-      lng: latest?.lng,
-      heading: latest?.heading,
-      speedMps: latest?.speedMps,
-      lastUpdatedAt: latest?.ts,
-    });
-  });
-  return [...vehicles.values()];
-}
-
-function buildCoopStatePayload(sessionId: string): CoopStatePayload {
-  const session = getOrCreateCoopSession(sessionId);
-  syncCoopHost(sessionId);
-  const hostVehicleId = [...session.participants.values()].find(
-    (entry) => entry.userId === session.hostUserId
-  )?.vehicleId;
-  return {
-    sessionId,
-    invitePath: buildInvitePath(sessionId, hostVehicleId),
-    hostUserId: session.hostUserId,
-    hostUsername: session.hostUsername,
-    participants: [...session.participants.values()].sort((a, b) => a.joinedAt - b.joinedAt),
-    vehicles: buildCoopVehicles(sessionId),
-    messages: session.messages.slice(-50),
-    sharedRoute: session.sharedRoute || null,
-  };
-}
-
-function broadcastCoopState(sessionId: string) {
-  const session = coopSessionById.get(sessionId);
-  if (!session) return;
-  const payload = buildCoopStatePayload(sessionId);
-  session.sockets.forEach((socket) => {
+function broadcastCoopState(broadcast: CoopBroadcast<WebSocket> | null) {
+  if (!broadcast) return;
+  broadcast.sockets.forEach((socket) => {
     if (socket.readyState === WebSocket.OPEN) {
-      sendMessage(socket, { type: 'coop_state', payload });
+      sendMessage(socket, { type: 'coop_state', payload: broadcast.payload });
     }
   });
 }
 
 function broadcastCoopStateForVehicle(vehicleId: string) {
-  coopSessionById.forEach((session, sessionId) => {
-    const hasVehicle = [...session.participants.values()].some((entry) => entry.vehicleId === vehicleId);
-    if (hasVehicle) {
-      broadcastCoopState(sessionId);
-    }
-  });
+  coopSessions.buildBroadcastsForVehicle(vehicleId).forEach(broadcastCoopState);
 }
-
-function leaveCoopSession(ws: WebSocket) {
-  const meta = coopMetaBySocket.get(ws);
-  if (!meta) return;
-  coopMetaBySocket.delete(ws);
-  const session = coopSessionById.get(meta.sessionId);
-  if (!session) return;
-  session.sockets.delete(ws);
-  session.participants.delete(meta.userId);
-  syncCoopHost(meta.sessionId);
-  if (!session.sockets.size && !session.participants.size) {
-    coopSessionById.delete(meta.sessionId);
-    return;
-  }
-  broadcastCoopState(meta.sessionId);
-}
-
-function joinCoopSession(
-  ws: WebSocket,
-  sessionId: string,
-  vehicleId: string | undefined,
-  userId: string,
-  username: string,
-  requestedRole?: CoopRole
-) {
-  const previous = coopMetaBySocket.get(ws);
-  if (previous && (previous.sessionId !== sessionId || previous.userId !== userId)) {
-    leaveCoopSession(ws);
-  }
-  const session = getOrCreateCoopSession(sessionId);
-  session.sockets.add(ws);
-  const now = Date.now();
-  const role: CoopRole =
-    requestedRole === 'spectator' ? 'spectator' : requestedRole === 'host' ? 'host' : 'driver';
-  session.participants.set(userId, {
-    userId,
-    username,
-    vehicleId,
-    role,
-    joinedAt: session.participants.get(userId)?.joinedAt || now,
-    lastSeenAt: now,
-    isHost: false,
-  });
-  coopMetaBySocket.set(ws, { sessionId, vehicleId, userId, username, role });
-  syncCoopHost(sessionId);
-  sendMessage(ws, { type: 'coop_state', payload: buildCoopStatePayload(sessionId) });
-  broadcastCoopState(sessionId);
-}
-
-function pushCoopChat(
-  sessionId: string,
-  userId: string,
-  username: string,
-  vehicleId: string | undefined,
-  text: string
-) {
-  const session = getOrCreateCoopSession(sessionId);
-  const trimmed = text.trim();
-  if (!trimmed) return null;
-  const message: CoopChatMessage = {
-    id: newId('coop-msg'),
-    sessionId,
-    vehicleId,
-    authorId: userId,
-    author: username,
-    text: trimmed,
-    ts: Date.now(),
-  };
-  session.messages = [...session.messages, message].slice(-50);
-  const existing = session.participants.get(userId);
-  session.participants.set(userId, {
-    ...(existing || {
-      userId,
-      username,
-      vehicleId,
-      role: vehicleId ? 'driver' : 'spectator',
-      joinedAt: Date.now(),
-      isHost: false,
-    }),
-    username,
-    vehicleId: vehicleId || existing?.vehicleId,
-    lastSeenAt: Date.now(),
-  });
-  syncCoopHost(sessionId);
-  session.sockets.forEach((socket) => {
-    if (socket.readyState === WebSocket.OPEN) {
-      sendMessage(socket, { type: 'coop_chat', payload: message });
-    }
-  });
-  broadcastCoopState(sessionId);
-  return message;
-}
-
-function shareCoopRoute(
-  sessionId: string,
-  userId: string,
-  username: string,
-  vehicleId: string | undefined,
-  route: { type: 'LineString'; coordinates: [number, number][] },
-  label?: string,
-  distanceMeters?: number,
-  etaSeconds?: number
-) {
-  const session = getOrCreateCoopSession(sessionId);
-  session.sharedRoute = {
-    sessionId,
-    vehicleId,
-    authorId: userId,
-    author: username,
-    label,
-    route,
-    distanceMeters,
-    etaSeconds,
-    sharedAt: Date.now(),
-  };
-  broadcastCoopState(sessionId);
-}
-
-function clearCoopRoute(sessionId: string) {
-  const session = getOrCreateCoopSession(sessionId);
-  session.sharedRoute = null;
-  broadcastCoopState(sessionId);
-}
-
-const locationSubscribers = new Map<WebSocket, string>();
-const latestLocations = new Map<string, VehicleLocationPayload>();
-const inputAckBySocket = new Map<WebSocket, { received: number; lastAckTs: number }>();
 
 function acknowledgeInput(ws: WebSocket, vehicleId: string | undefined, endpoint: string) {
   const previous = inputAckBySocket.get(ws) || { received: 0, lastAckTs: 0 };
@@ -1452,555 +1163,50 @@ const apiServer = createServer(async (req, res) => {
       return;
     }
 
-    if (pathname === '/api/auth/login' && req.method === 'POST') {
-      const body = await parseBody<{ identifier?: string; password?: string }>(req, BODY_LIMIT_AUTH);
-      const identifier = (body.identifier || '').trim();
-      const password = body.password || '';
-      if (!identifier || !password) {
-        sendJson(res, 400, { error: 'Identifier and password are required.' });
-        return;
-      }
-      const user = findUserByIdentifier(db, identifier);
-      if (!user || !verifyPassword(password, user.passwordHash)) {
-        sendJson(res, 401, { error: 'Invalid credentials.' });
-        return;
-      }
-      sendJson(res, 200, { user: sanitizeUser(user) });
-      return;
-    }
-
-    if (pathname === '/api/auth/register' && req.method === 'POST') {
-      const body = await parseBody<{ username?: string; email?: string; password?: string }>(
-        req,
-        BODY_LIMIT_AUTH
-      );
-      const username = (body.username || '').trim();
-      const email = (body.email || '').trim();
-      const password = body.password || '';
-
-      if (!username || !email || !password) {
-        sendJson(res, 400, { error: 'Username, email, and password are required.' });
-        return;
-      }
-      if (password.length < 8) {
-        sendJson(res, 400, { error: 'Password must be at least 8 characters.' });
-        return;
-      }
-
-      const normalizedEmail = email.toLowerCase();
-      const normalizedUsername = username.toLowerCase();
-      const users = listUsers(db);
-      const exists = users.some(
-        (item) =>
-          item.username.toLowerCase() === normalizedUsername ||
-          (item.email || '').toLowerCase() === normalizedEmail
-      );
-      if (exists) {
-        sendJson(res, 409, { error: 'Username or email already exists.' });
-        return;
-      }
-
-      const user: StoredUser = {
-        id: newId('user'),
-        username,
-        email,
-        role: 'user',
-        createdAt: nowIso(),
-        passwordHash: hashPassword(password),
-      };
-      insertUser(db, user);
-      sendJson(res, 201, { user: sanitizeUser(user) });
-      return;
-    }
-
-    if (pathname === '/api/search' && req.method === 'GET') {
-      const category = (url.searchParams.get('category') || 'users').trim();
-      const query = normalizeSearchQuery(url.searchParams.get('q'));
-      const limit = clampSearchLimit(url.searchParams.get('limit'));
-
-      if (category === 'users') {
-        const results = listUsers(db)
-          .map(sanitizeUser)
-          .filter(
-            (user) =>
-              matchesSearch(user.username, query) ||
-              matchesSearch(user.id, query) ||
-              matchesSearch(user.email, query) ||
-              matchesSearch(user.role, query)
-          )
-          .slice(0, limit);
-        sendJson(res, 200, { category, results, total: results.length });
-        return;
-      }
-
-      if (category === 'vehicles') {
-        const results = listVehicles(db)
-          .filter(
-            (vehicle) =>
-              matchesSearch(vehicle.id, query) ||
-              matchesSearch(vehicle.model, query) ||
-              matchesSearch(vehicle.status, query) ||
-              matchesSearch(vehicle.condition, query) ||
-              matchesSearch(vehicle.location, query)
-          )
-          .slice(0, limit);
-        sendJson(res, 200, { category, results, total: results.length });
-        return;
-      }
-
-      if (category === 'logs') {
-        const results = listLogs(db, MAX_LOGS)
-          .filter(
-            (log) =>
-              matchesSearch(log.username, query) ||
-              matchesSearch(log.userId, query) ||
-              matchesSearch(log.action, query) ||
-              matchesSearch(log.details, query)
-          )
-          .slice(0, limit);
-        sendJson(res, 200, { category, results, total: results.length });
-        return;
-      }
-
-      sendJson(res, 400, { error: 'Unsupported search category.' });
-      return;
-    }
-
-    if (pathname === '/api/users' && req.method === 'GET') {
-      sendJson(res, 200, listUsers(db).map(sanitizeUser));
-      return;
-    }
-
-    if (pathname === '/api/users' && req.method === 'POST') {
-      const body = await parseBody<{
-        username?: string;
-        email?: string;
-        role?: User['role'];
-        password?: string;
-      }>(req, BODY_LIMIT_USERS);
-      const username = (body.username || '').trim();
-      const email = (body.email || '').trim();
-      const role = body.role === 'admin' ? 'admin' : 'user';
-      const password = body.password || '';
-
-      if (!username || !password) {
-        sendJson(res, 400, { error: 'Username and password are required.' });
-        return;
-      }
-      if (password.length < 8) {
-        sendJson(res, 400, { error: 'Password must be at least 8 characters.' });
-        return;
-      }
-
-      const normalizedEmail = email.toLowerCase();
-      const normalizedUsername = username.toLowerCase();
-      const users = listUsers(db);
-      const duplicate = users.some(
-        (item) =>
-          item.username.toLowerCase() === normalizedUsername ||
-          (email && (item.email || '').toLowerCase() === normalizedEmail)
-      );
-      if (duplicate) {
-        sendJson(res, 409, { error: 'User already exists.' });
-        return;
-      }
-
-      const user: StoredUser = {
-        id: newId('user'),
-        username,
-        email: email || undefined,
-        role,
-        createdAt: nowIso(),
-        passwordHash: hashPassword(password),
-      };
-      insertUser(db, user);
-      sendJson(res, 201, listUsers(db).map(sanitizeUser));
-      return;
-    }
-
-    if (pathname.startsWith('/api/users/') && req.method === 'PUT') {
-      const id = decodeURIComponent(pathname.replace('/api/users/', ''));
-      const lastUpdate = userUpdateRateById.get(id) || 0;
-      const nowMs = Date.now();
-      if (nowMs - lastUpdate < USER_UPDATE_MIN_INTERVAL_MS) {
-        sendJson(res, 429, { error: 'User updates are rate limited. Please retry shortly.' });
-        return;
-      }
-      const body = await parseBody<{
-        username?: string;
-        email?: string;
-        role?: User['role'];
-        password?: string;
-      }>(req, BODY_LIMIT_USERS);
-
-      const next = updateUser(db, id, {
-        username: body.username,
-        email: body.email,
-        role: body.role === 'admin' ? 'admin' : body.role === 'user' ? 'user' : undefined,
-        passwordHash: body.password ? hashPassword(body.password) : undefined,
-      });
-      if (!next) {
-        sendJson(res, 404, { error: 'User not found.' });
-        return;
-      }
-      userUpdateRateById.set(id, nowMs);
-      sendJson(res, 200, listUsers(db).map(sanitizeUser));
-      return;
-    }
-
-    if (pathname.startsWith('/api/users/') && req.method === 'DELETE') {
-      const id = decodeURIComponent(pathname.replace('/api/users/', ''));
-      deleteUser(db, id);
-      const vehicles = listVehicles(db).map((vehicle) => ({
-        ...vehicle,
-        assignedUsers: vehicle.assignedUsers.filter((userId) => userId !== id),
-      }));
-      vehicles.forEach((vehicle) => dbUpdateVehicle(db, vehicle.id, vehicle));
-      sendJson(res, 200, listUsers(db).map(sanitizeUser));
-      return;
-    }
-
-    if (pathname === '/api/vehicles' && req.method === 'GET') {
-      sendJson(res, 200, listVehicles(db));
-      return;
-    }
-
-    if (pathname === '/api/vehicles' && req.method === 'POST') {
-      const body = await parseBody<Vehicle>(req, BODY_LIMIT_VEHICLES);
-      insertVehicle(db, withVehicleCapabilities(body));
-      sendJson(res, 201, listVehicles(db));
-      return;
-    }
-
-    if (pathname.startsWith('/api/vehicles/') && req.method === 'PUT') {
-      const id = decodeURIComponent(pathname.replace('/api/vehicles/', ''));
-      const body = await parseBody<Partial<Vehicle>>(req, BODY_LIMIT_VEHICLES);
-      const {
-        controlLeaseId: _ignoredLease,
-        controlLeaseIssuedAt: _ignoredLeaseIssuedAt,
-        ...bodySafe
-      } = body as Partial<Vehicle>;
-      const leaseIssuedAt = nowIso();
-      const vehicle = dbGetVehicle(db, id);
-      if (!vehicle) {
-        sendJson(res, 404, { error: 'Vehicle not found.' });
-        return;
-      }
-      const next = withVehicleCapabilities({
-        ...vehicle,
-        ...bodySafe,
-        controlLeaseId: vehicle.controlLeaseId,
-        controlLeaseIssuedAt: vehicle.controlLeaseIssuedAt,
-      });
-        const wantsLease = next.status === 'unavailable' && (next.currentUserId || next.currentUser);
-        const userChanged =
-          (next.currentUserId ?? next.currentUser ?? '') !== (vehicle.currentUserId ?? vehicle.currentUser ?? '');
-        const statusChanged = vehicle.status !== next.status;
-        if (wantsLease) {
-          if (!next.controlLeaseId || statusChanged || userChanged) {
-            next.controlLeaseId = newId('lease');
-            next.controlLeaseIssuedAt = leaseIssuedAt;
-            for (const key of controlSequenceByVehicle.keys()) {
-              if (key.startsWith(`${vehicle.id}:`)) {
-                controlSequenceByVehicle.delete(key);
-              }
-            }
-          }
-        } else {
-          next.controlLeaseId = undefined;
-          next.controlLeaseIssuedAt = undefined;
+    if (await handleAuthRoutes(req, res, pathname, url, db)) return;
+    if (
+      await handleAdminRoutes(req, res, pathname, url, {
+        db,
+        userUpdateRateById,
+        resetVehicleControlSequence: (vehicleId) => {
           for (const key of controlSequenceByVehicle.keys()) {
-            if (key.startsWith(`${vehicle.id}:`)) {
+            if (key.startsWith(`${vehicleId}:`)) {
               controlSequenceByVehicle.delete(key);
             }
           }
-        }
-      dbUpdateVehicle(db, id, next);
-      sendJson(res, 200, listVehicles(db));
+        },
+      })
+    ) {
       return;
     }
-
-    if (pathname.startsWith('/api/vehicles/') && req.method === 'DELETE') {
-      const id = decodeURIComponent(pathname.replace('/api/vehicles/', ''));
-      dbDeleteVehicle(db, id);
-      sendJson(res, 200, listVehicles(db));
-      return;
-    }
-
-    if (pathname === '/api/logs' && req.method === 'GET') {
-      sendJson(res, 200, listLogs(db, MAX_LOGS));
-      return;
-    }
-
-    if (pathname === '/api/logs' && req.method === 'POST') {
-      const body = await parseBody<ActivityLog>(req, BODY_LIMIT_LOGS);
-      addLog(db, body);
-      sendJson(res, 201, listLogs(db, MAX_LOGS));
-      return;
-    }
-
-    if (pathname === '/api/logs' && req.method === 'DELETE') {
-      clearLogs(db);
-      sendJson(res, 204, {});
-      return;
-    }
-
-    if (pathname === '/api/records' && req.method === 'GET') {
-      sendJson(res, 200, listRecords(db, MAX_RECORDS));
-      return;
-    }
-
-    if (pathname === '/api/records' && req.method === 'POST') {
-      const body = await parseBody<RecordEntry>(req, BODY_LIMIT_RECORDS);
-      addRecord(db, body);
-      sendJson(res, 201, listRecords(db, MAX_RECORDS));
-      return;
-    }
-
-    if (pathname === '/api/missions' && req.method === 'GET') {
-      const vehicleId = url.searchParams.get('vehicleId') || '';
-      const includeRoute =
-        url.searchParams.get('includeRoute') === '1' ||
-        url.searchParams.get('includeRoute') === 'true';
-      const entries = listMissions(db, vehicleId || undefined, { includeRoute });
-      sendJson(res, 200, entries);
-      return;
-    }
-
-    if (pathname === '/api/missions' && req.method === 'POST') {
-      const body = await parseBody<Partial<MissionPlan>>(req, BODY_LIMIT_MISSIONS);
-      const vehicleId = (body.vehicleId || '').trim();
-      if (!vehicleId) {
-        sendJson(res, 400, { error: 'vehicleId is required.' });
-        return;
-      }
-      const name = (body.name || `Mission ${new Date().toLocaleString()}`).trim().slice(0, 80);
-      const pathType = body.pathType === 'roads' ? 'roads' : 'straight';
-      const speedMps =
-        typeof body.speedMps === 'number' && Number.isFinite(body.speedMps) && body.speedMps > 0
-          ? body.speedMps
-          : 1;
-      const waypoints = sanitizeWaypoints(body.waypoints || []);
-      const route = sanitizeRoute(body.route);
-      const distanceMeters =
-        typeof body.distanceMeters === 'number' && Number.isFinite(body.distanceMeters)
-          ? body.distanceMeters
-          : undefined;
-      const etaSeconds =
-        typeof body.etaSeconds === 'number' && Number.isFinite(body.etaSeconds)
-          ? body.etaSeconds
-          : undefined;
-      const profile = body.profile === 'drone' ? 'drone' : body.profile === 'rover' ? 'rover' : undefined;
-      const arrivalRadiusM =
-        typeof body.arrivalRadiusM === 'number' && Number.isFinite(body.arrivalRadiusM)
-          ? body.arrivalRadiusM
-          : undefined;
-      const loiterSeconds =
-        typeof body.loiterSeconds === 'number' && Number.isFinite(body.loiterSeconds)
-          ? body.loiterSeconds
-          : undefined;
-      const cruiseAltitudeM =
-        typeof body.cruiseAltitudeM === 'number' && Number.isFinite(body.cruiseAltitudeM)
-          ? body.cruiseAltitudeM
-          : undefined;
-      const now = nowIso();
-      const plan: MissionPlan = {
-        id: body.id || randomUUID(),
-        vehicleId,
-        name: name || `Mission ${now}`,
-        pathType,
-        speedMps,
-        profile,
-        arrivalRadiusM,
-        loiterSeconds,
-        cruiseAltitudeM,
-        waypoints,
-        route,
-        distanceMeters,
-        etaSeconds,
-        createdAt: body.createdAt || now,
-        updatedAt: now,
-      };
-      upsertMission(db, plan);
-      const entries = listMissions(db, vehicleId);
-      sendJson(res, 201, entries);
-      return;
-    }
-
-    if (pathname.startsWith('/api/missions/') && pathname.endsWith('/route') && req.method === 'GET') {
-      const id = decodeURIComponent(pathname.replace('/api/missions/', '').replace('/route', ''));
-      const route = getMissionRoute(db, id);
-      if (!route) {
-        sendJson(res, 404, { error: 'Route not found.' });
-        return;
-      }
-      sendJson(res, 200, { route });
-      return;
-    }
-
-    if (pathname.startsWith('/api/missions/') && pathname.endsWith('/route') && req.method === 'PUT') {
-      const id = decodeURIComponent(pathname.replace('/api/missions/', '').replace('/route', ''));
-      const body = await parseBody<{
-        route?: MissionPlan['route'];
-        distanceMeters?: number;
-        etaSeconds?: number;
-      }>(req, BODY_LIMIT_MISSIONS);
-      const existing = listMissions(db, undefined, { includeRoute: true }).find(
-        (entry) => entry.id === id
-      );
-      if (!existing) {
-        sendJson(res, 404, { error: 'Mission not found.' });
-        return;
-      }
-      const route = sanitizeRoute(body.route ?? existing.route);
-      if (!route) {
-        sendJson(res, 400, { error: 'Route is required.' });
-        return;
-      }
-      const next: MissionPlan = {
-        ...existing,
-        route,
-        distanceMeters:
-          typeof body.distanceMeters === 'number' && Number.isFinite(body.distanceMeters)
-            ? body.distanceMeters
-            : existing.distanceMeters,
-        etaSeconds:
-          typeof body.etaSeconds === 'number' && Number.isFinite(body.etaSeconds)
-            ? body.etaSeconds
-            : existing.etaSeconds,
-        updatedAt: nowIso(),
-      };
-      upsertMission(db, next);
-      setMissionRoute(db, next.id, next.vehicleId, route, next.updatedAt);
-      sendJson(res, 200, { ok: true });
-      return;
-    }
-
-    if (pathname.startsWith('/api/missions/') && req.method === 'PUT') {
-      const id = decodeURIComponent(pathname.replace('/api/missions/', ''));
-      const body = await parseBody<Partial<MissionPlan>>(req, BODY_LIMIT_MISSIONS);
-      const existing = listMissions(db, undefined, { includeRoute: true }).find(
-        (entry) => entry.id === id
-      );
-      if (!existing) {
-        sendJson(res, 404, { error: 'Mission not found.' });
-        return;
-      }
-      const waypoints = sanitizeWaypoints(body.waypoints ?? existing.waypoints);
-      const route = sanitizeRoute(body.route ?? existing.route);
-      const next: MissionPlan = {
-        ...existing,
-        name: typeof body.name === 'string' ? body.name.trim().slice(0, 80) : existing.name,
-        pathType: body.pathType === 'roads' ? 'roads' : body.pathType === 'straight' ? 'straight' : existing.pathType,
-        speedMps:
-          typeof body.speedMps === 'number' && Number.isFinite(body.speedMps) && body.speedMps > 0
-            ? body.speedMps
-            : existing.speedMps,
-        profile: body.profile === 'drone' ? 'drone' : body.profile === 'rover' ? 'rover' : existing.profile,
-        arrivalRadiusM:
-          typeof body.arrivalRadiusM === 'number' && Number.isFinite(body.arrivalRadiusM)
-            ? body.arrivalRadiusM
-            : existing.arrivalRadiusM,
-        loiterSeconds:
-          typeof body.loiterSeconds === 'number' && Number.isFinite(body.loiterSeconds)
-            ? body.loiterSeconds
-            : existing.loiterSeconds,
-        cruiseAltitudeM:
-          typeof body.cruiseAltitudeM === 'number' && Number.isFinite(body.cruiseAltitudeM)
-            ? body.cruiseAltitudeM
-            : existing.cruiseAltitudeM,
-        waypoints,
-        route,
-        distanceMeters:
-          typeof body.distanceMeters === 'number' && Number.isFinite(body.distanceMeters)
-            ? body.distanceMeters
-            : existing.distanceMeters,
-        etaSeconds:
-          typeof body.etaSeconds === 'number' && Number.isFinite(body.etaSeconds)
-            ? body.etaSeconds
-            : existing.etaSeconds,
-        updatedAt: nowIso(),
-      };
-      upsertMission(db, next);
-      const entries = listMissions(db, next.vehicleId);
-      sendJson(res, 200, entries);
-      return;
-    }
-
-    if (pathname.startsWith('/api/missions/') && req.method === 'DELETE') {
-      const id = decodeURIComponent(pathname.replace('/api/missions/', ''));
-      const existing = listMissions(db).find((entry) => entry.id === id);
-      if (!existing) {
-        sendJson(res, 404, { error: 'Mission not found.' });
-        return;
-      }
-      dbDeleteMission(db, id);
-      const entries = listMissions(db, existing.vehicleId);
-      sendJson(res, 200, entries);
-      return;
-    }
-
-    if (pathname === '/api/input' && req.method === 'GET') {
-      sendJson(res, 200, filterTelemetry(url.searchParams));
-      return;
-    }
-
-    if (pathname === '/api/input' && req.method === 'POST') {
-      const body = await parseBody<TelemetryEntry>(req, BODY_LIMIT_INPUT);
-      const source = req.socket.remoteAddress || 'unknown';
-      const nowMs = Date.now();
-      const rateKey = buildTelemetrySourceKey(source, body.userId, body.vehicleId);
-      if (
-        !consumeRateLimit(
-          telemetryApiRateBySource,
-          rateKey,
-          TELEMETRY_INGEST_RATE_PER_SEC,
-          nowMs,
-          TELEMETRY_INGEST_BURST
-        )
-      ) {
-        incMetric(wsMetricsDropped, metricKey(['api', body.vehicleId, 'rate_limited']));
-        sendJson(res, 429, { ok: false, dropped: 'rate_limited' });
-        return;
-      }
-
-      const next: TelemetryEntry = {
-        ...body,
-        id: body.id ?? Date.now(),
-        bytes: body.bytes ?? JSON.stringify(body.payload).length,
-      };
-      const dropped = enqueueTelemetry(next);
-      if (dropped > 0) {
-        incMetric(wsMetricsDropped, metricKey(['api', body.vehicleId, 'queue_overflow']), dropped);
-        sendJson(res, 429, { ok: false, dropped: 'queue_overflow' });
-        return;
-      }
-      sendJson(res, 201, { ok: true });
-      return;
-    }
-
-    if (pathname === '/api/input/stats' && req.method === 'GET') {
-      const entries = filterTelemetry(url.searchParams);
-      const bytes = entries.reduce((sum, entry) => sum + (entry.bytes || 0), 0);
-      sendJson(res, 200, { bytes, count: entries.length });
-      return;
-    }
-
-    if (pathname === '/api/input/export' && req.method === 'GET') {
-      const entries = filterTelemetry(url.searchParams);
-      const header = 'ts,iso,userId,vehicleId,leaseId,buttons,axes';
-      const lines = entries.map((entry) =>
-        [
-          entry.ts,
-          new Date(entry.ts).toISOString(),
-          entry.userId || '',
-            entry.vehicleId || '',
-            entry.payload.leaseId || '',
-          `"${entry.payload.buttons.join('|')}"`,
-          `"${entry.payload.axes.join('|')}"`,
-        ].join(',')
-      );
-      sendText(res, 200, [header, ...lines].join('\n'));
+    if (await handleMissionRoutes(req, res, pathname, url, db)) return;
+    if (
+      await handleTelemetryRoutes(req, res, pathname, url, {
+        filterTelemetry,
+        enqueueTelemetry: (entry, source) => {
+          const nowMs = Date.now();
+          const rateKey = buildTelemetrySourceKey(source, entry.userId, entry.vehicleId);
+          if (
+            !consumeRateLimit(
+              telemetryApiRateBySource,
+              rateKey,
+              TELEMETRY_INGEST_RATE_PER_SEC,
+              nowMs,
+              TELEMETRY_INGEST_BURST
+            )
+          ) {
+            incMetric(wsMetricsDropped, metricKey(['api', entry.vehicleId, 'rate_limited']));
+            return { ok: false, dropped: 'rate_limited' };
+          }
+          const dropped = enqueueTelemetry(entry);
+          if (dropped > 0) {
+            incMetric(wsMetricsDropped, metricKey(['api', entry.vehicleId, 'queue_overflow']), dropped);
+            return { ok: false, dropped: 'queue_overflow' };
+          }
+          return { ok: true };
+        },
+      })
+    ) {
       return;
     }
 
@@ -2067,40 +1273,65 @@ if (START_WS && wssControl) {
       }
 
       if (parsed.kind === 'coop_join') {
-        joinCoopSession(ws, parsed.sessionId, parsed.vehicleId, parsed.userId, parsed.username, parsed.role);
+        coopSessions
+          .join(ws, {
+            sessionId: parsed.sessionId,
+            vehicleId: parsed.vehicleId,
+            userId: parsed.userId,
+            username: parsed.username,
+            role: parsed.role,
+          })
+          .forEach(broadcastCoopState);
         return;
       }
 
       if (parsed.kind === 'coop_leave') {
-        leaveCoopSession(ws);
+        broadcastCoopState(coopSessions.leave(ws));
         return;
       }
 
       if (parsed.kind === 'coop_chat') {
-        const actor = coopMetaBySocket.get(ws);
+        const actor = coopSessions.getMeta(ws);
         const actorUserId = actor?.userId || parsed.userId;
         const actorUsername = actor?.username || parsed.username;
-        pushCoopChat(parsed.sessionId, actorUserId, actorUsername, actor?.vehicleId || parsed.vehicleId, parsed.text);
+        const result = coopSessions.pushChat({
+          sessionId: parsed.sessionId,
+          userId: actorUserId,
+          username: actorUsername,
+          vehicleId: actor?.vehicleId || parsed.vehicleId,
+          text: parsed.text,
+        });
+        if (result?.message) {
+          const broadcast = result.broadcast;
+          broadcast.sockets.forEach((socket) => {
+            if (socket.readyState === WebSocket.OPEN) {
+              sendMessage(socket, { type: 'coop_chat', payload: result.message! });
+            }
+          });
+          broadcastCoopState(broadcast);
+        }
         return;
       }
 
       if (parsed.kind === 'coop_share_route') {
-        const actor = coopMetaBySocket.get(ws);
-        shareCoopRoute(
-          parsed.sessionId,
-          actor?.userId || parsed.userId,
-          actor?.username || parsed.username,
-          actor?.vehicleId || parsed.vehicleId,
-          parsed.route,
-          parsed.label,
-          parsed.distanceMeters,
-          parsed.etaSeconds
+        const actor = coopSessions.getMeta(ws);
+        broadcastCoopState(
+          coopSessions.shareRoute({
+            sessionId: parsed.sessionId,
+            userId: actor?.userId || parsed.userId,
+            username: actor?.username || parsed.username,
+            vehicleId: actor?.vehicleId || parsed.vehicleId,
+            route: parsed.route,
+            label: parsed.label,
+            distanceMeters: parsed.distanceMeters,
+            etaSeconds: parsed.etaSeconds,
+          })
         );
         return;
       }
 
       if (parsed.kind === 'coop_clear_route') {
-        clearCoopRoute(parsed.sessionId);
+        broadcastCoopState(coopSessions.clearRoute(parsed.sessionId));
         return;
       }
 
@@ -2289,7 +1520,7 @@ if (START_WS && wssControl) {
   });
 
   ws.on('close', () => {
-    leaveCoopSession(ws);
+    broadcastCoopState(coopSessions.leave(ws));
     telemetryWsRateBySource.delete(sourceKey);
     inputAckBySocket.delete(ws);
     locationSubscribers.delete(ws);

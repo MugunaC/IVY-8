@@ -1,7 +1,7 @@
 import { Menu } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 
-type InsightView = 'user' | 'coop' | 'diagnostics';
+type InsightView = 'user' | 'diagnostics';
 
 interface ControllerQuickMenuProps {
   open: boolean;
@@ -30,13 +30,6 @@ export function ControllerQuickMenu(props: ControllerQuickMenuProps) {
             onClick={() => onSelect('user')}
           >
             User
-          </button>
-          <button
-            type="button"
-            className="w-full px-3 py-2 text-left text-sm text-foreground hover:bg-muted"
-            onClick={() => onSelect('coop')}
-          >
-            Co-op
           </button>
           <button
             type="button"

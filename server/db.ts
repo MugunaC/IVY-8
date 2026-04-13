@@ -9,11 +9,15 @@ import {
 import { hashPassword } from './lib/auth.js';
 import type {
   ActivityLog,
+  ActivityLogPage,
+  ActivityLogStats,
   MissionPlan,
+  PaginatedResult,
   RecordEntry,
   TelemetryEntry,
   User,
   Vehicle,
+  VehicleStatus,
 } from '../shared/types.js';
 
 const DB_DIR = path.join(process.cwd(), 'server/data');
@@ -33,6 +37,58 @@ function nowIso() {
 export type StoredUser = User & { passwordHash: string };
 
 export type Db = Database;
+
+export interface PageQuery {
+  page?: number;
+  pageSize?: number;
+}
+
+export interface UserQuery extends PageQuery {
+  q?: string;
+}
+
+export interface VehicleQuery extends PageQuery {
+  q?: string;
+  status?: VehicleStatus | 'all';
+}
+
+export interface LogQuery extends PageQuery {
+  q?: string;
+  action?: ActivityLog['action'] | 'all';
+}
+
+function clampPage(value: number | undefined) {
+  if (!Number.isFinite(value) || (value as number) < 1) return 1;
+  return Math.floor(value as number);
+}
+
+function clampPageSize(value: number | undefined, fallback = 10, max = 100) {
+  if (!Number.isFinite(value) || (value as number) < 1) return fallback;
+  return Math.min(max, Math.floor(value as number));
+}
+
+function buildLikePattern(query?: string) {
+  const normalized = (query || '').trim().toLowerCase();
+  if (!normalized) return '';
+  return `%${normalized.replace(/[\\%_]/g, '\\$&')}%`;
+}
+
+function buildPaginatedResult<T>(
+  items: T[],
+  total: number,
+  query: PageQuery,
+  fallbackPageSize = 10
+): PaginatedResult<T> {
+  const pageSize = clampPageSize(query.pageSize, fallbackPageSize);
+  const page = clampPage(query.page);
+  return {
+    items,
+    total,
+    page,
+    pageSize,
+    totalPages: Math.max(1, Math.ceil(total / pageSize)),
+  };
+}
 
 export function openDb() {
   ensureDbDir();
@@ -494,6 +550,31 @@ export function listUsers(db: Db) {
   return db.prepare('SELECT * FROM users').all() as StoredUser[];
 }
 
+export function queryUsers(db: Db, query: UserQuery = {}): PaginatedResult<StoredUser> {
+  const like = buildLikePattern(query.q);
+  const pageSize = clampPageSize(query.pageSize, 10);
+  const page = clampPage(query.page);
+  const offset = (page - 1) * pageSize;
+  const where = like
+    ? `WHERE lower(id) LIKE ? ESCAPE '\\'
+       OR lower(username) LIKE ? ESCAPE '\\'
+       OR lower(coalesce(email, '')) LIKE ? ESCAPE '\\'
+       OR lower(role) LIKE ? ESCAPE '\\'`
+    : '';
+  const params = like ? [like, like, like, like] : [];
+  const totalRow = db
+    .prepare(`SELECT COUNT(1) as count FROM users ${where}`)
+    .get(...params) as { count: number };
+  const rows = db
+    .prepare(
+      `SELECT * FROM users ${where}
+       ORDER BY datetime(createdAt) DESC, username COLLATE NOCASE ASC
+       LIMIT ? OFFSET ?`
+    )
+    .all(...params, pageSize, offset) as StoredUser[];
+  return buildPaginatedResult(rows, totalRow.count, { page, pageSize });
+}
+
 export function findUserByIdentifier(db: Db, identifier: string) {
   const normalized = identifier.trim().toLowerCase();
   if (!normalized) return undefined;
@@ -528,6 +609,42 @@ export function listVehicles(db: Db): Vehicle[] {
   return rows.map(deserializeVehicle);
 }
 
+export function queryVehicles(db: Db, query: VehicleQuery = {}): PaginatedResult<Vehicle> {
+  const like = buildLikePattern(query.q);
+  const pageSize = clampPageSize(query.pageSize, 10);
+  const page = clampPage(query.page);
+  const offset = (page - 1) * pageSize;
+  const whereParts: string[] = [];
+  const params: Array<string | number> = [];
+  if (query.status && query.status !== 'all') {
+    whereParts.push('status = ?');
+    params.push(query.status);
+  }
+  if (like) {
+    whereParts.push(`(
+      lower(id) LIKE ? ESCAPE '\\'
+      OR lower(model) LIKE ? ESCAPE '\\'
+      OR lower(status) LIKE ? ESCAPE '\\'
+      OR lower(condition) LIKE ? ESCAPE '\\'
+      OR lower(location) LIKE ? ESCAPE '\\'
+      OR lower(coalesce(currentUser, '')) LIKE ? ESCAPE '\\'
+    )`);
+    params.push(like, like, like, like, like, like);
+  }
+  const where = whereParts.length ? `WHERE ${whereParts.join(' AND ')}` : '';
+  const totalRow = db
+    .prepare(`SELECT COUNT(1) as count FROM vehicles ${where}`)
+    .get(...params) as { count: number };
+  const rows = db
+    .prepare(
+      `SELECT * FROM vehicles ${where}
+       ORDER BY id COLLATE NOCASE ASC
+       LIMIT ? OFFSET ?`
+    )
+    .all(...params, pageSize, offset);
+  return buildPaginatedResult(rows.map(deserializeVehicle), totalRow.count, { page, pageSize });
+}
+
 export function getVehicle(db: Db, id: string): Vehicle | null {
   const row = db.prepare('SELECT * FROM vehicles WHERE id = ?').get(id);
   return row ? deserializeVehicle(row) : null;
@@ -560,6 +677,65 @@ export function listLogs(db: Db, limit: number) {
   return db
     .prepare('SELECT * FROM logs ORDER BY timestamp DESC LIMIT ?')
     .all(limit) as ActivityLog[];
+}
+
+export function getLogStats(db: Db): ActivityLogStats {
+  const rows = db
+    .prepare('SELECT action, COUNT(1) as count FROM logs GROUP BY action')
+    .all() as Array<{ action: ActivityLog['action']; count: number }>;
+  const stats: ActivityLogStats = {
+    login: 0,
+    logout: 0,
+    vehicle_selected: 0,
+    vehicle_unselected: 0,
+    vehicle_resumed: 0,
+  };
+  rows.forEach((row) => {
+    stats[row.action] = row.count;
+  });
+  return stats;
+}
+
+export function queryLogs(db: Db, query: LogQuery = {}): ActivityLogPage {
+  const like = buildLikePattern(query.q);
+  const pageSize = clampPageSize(query.pageSize, 10);
+  const page = clampPage(query.page);
+  const offset = (page - 1) * pageSize;
+  const whereParts: string[] = [];
+  const params: Array<string | number> = [];
+  if (query.action && query.action !== 'all') {
+    whereParts.push('action = ?');
+    params.push(query.action);
+  }
+  if (like) {
+    whereParts.push(`(
+      lower(id) LIKE ? ESCAPE '\\'
+      OR lower(userId) LIKE ? ESCAPE '\\'
+      OR lower(username) LIKE ? ESCAPE '\\'
+      OR lower(action) LIKE ? ESCAPE '\\'
+      OR lower(coalesce(details, '')) LIKE ? ESCAPE '\\'
+    )`);
+    params.push(like, like, like, like, like);
+  }
+  const where = whereParts.length ? `WHERE ${whereParts.join(' AND ')}` : '';
+  const totalRow = db
+    .prepare(`SELECT COUNT(1) as count FROM logs ${where}`)
+    .get(...params) as { count: number };
+  const items = db
+    .prepare(
+      `SELECT * FROM logs ${where}
+       ORDER BY datetime(timestamp) DESC, id DESC
+       LIMIT ? OFFSET ?`
+    )
+    .all(...params, pageSize, offset) as ActivityLog[];
+  const availableActions = db
+    .prepare('SELECT DISTINCT action FROM logs ORDER BY action ASC')
+    .all() as Array<{ action: ActivityLog['action'] }>;
+  return {
+    ...buildPaginatedResult(items, totalRow.count, { page, pageSize }),
+    stats: getLogStats(db),
+    availableActions: availableActions.map((row) => row.action),
+  };
 }
 
 export function addLog(db: Db, log: ActivityLog) {

@@ -8,9 +8,20 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/ca
 import { Input } from '@/app/components/ui/input';
 import { OverlayModal } from '@/app/components/ui/overlay-modal';
 import { FocusMapView } from '@/app/components/realtime/FocusMapView';
-import { CoopChatDock } from '@/app/components/realtime/CoopChatDock';
+import { ControllerChatPanel } from '@/app/components/realtime/control/ControllerChatPanel';
+import { RealtimeIndicatorsRow } from '@/app/components/realtime/control/RealtimeIndicatorsRow';
 import { ControllerQuickMenu } from '@/app/components/realtime/control/ControllerQuickMenu';
-import { GoogleMapsLocationIcon } from '@/app/components/realtime/GoogleMapsLocationIcon';
+import { ControllerPanelFallback } from '@/app/components/realtime/control/ControllerPanelFallback';
+import { ControllerStatusPanel } from '@/app/components/realtime/control/ControllerStatusPanel';
+import { ControllerMissionPanel } from '@/app/components/realtime/control/ControllerMissionPanel';
+import { ControllerDiagnosticsPanel } from '@/app/components/realtime/control/ControllerDiagnosticsPanel';
+import { ControllerTransportSettings } from '@/app/components/realtime/control/ControllerTransportSettings';
+import {
+  clamp,
+  GamepadState,
+  hasGamepadUiChanged,
+  haversineMeters,
+} from '@/app/components/realtime/control/controlMath';
 import {
   buildMissionPayloadFromPlan,
   formatDistanceKm,
@@ -20,12 +31,14 @@ import {
   resolveLatestMission,
 } from '@/app/components/realtime/missionUtils';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/app/components/ui/tabs';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/app/components/ui/select';
-import { DataStreamPanel } from '@/app/components/realtime/DataStreamPanel';
 import { ControllerVisualizerPanel } from '@/app/components/realtime/ControllerVisualizerPanel';
 import { useVehicleLocationFeed } from '@/app/hooks/useVehicleLocationFeed';
 import { usePresence } from '@/app/hooks/usePresence';
-import { useReconnectingWebSocket } from '@/app/hooks/useReconnectingWebSocket';
+import { useControlSocket } from '@/app/hooks/realtime/useControlSocket';
+import { useControllerIndicators } from '@/app/hooks/realtime/useControllerIndicators';
+import { useControllerSession } from '@/app/hooks/realtime/useControllerSession';
+import { useGamepadLoop } from '@/app/hooks/realtime/useGamepadLoop';
+import { useTelemetrySocket } from '@/app/hooks/realtime/useTelemetrySocket';
 import { enqueueRecord, enqueueTelemetry } from '@/app/data/inputStore';
 import { getMissions } from '@/app/data/missionsRepo';
 import { readJson, readString, STORAGE_KEYS } from '@/app/data/storage';
@@ -38,18 +51,16 @@ import {
   getDefaultTelemetryWsUrl,
 } from '@/app/utils/wsUrls';
 import { appendLog } from '@/app/data/logsRepo';
-import { getVehicles, markVehicleInUse, releaseVehicle } from '@/app/data/vehiclesRepo';
+import { releaseVehicle } from '@/app/data/vehiclesRepo';
 import {
   clearLastVehicleSelection,
   clearWsUrlOverride,
   getWsUrlOverride,
   setWsUrlOverride,
 } from '@/app/data/settingsRepo';
-import { clientMessageSchema, serverMessageSchema, PROTOCOL_VERSION } from '@shared/protocol';
-import type { CoopStatePayload, MissionPlan, TelemetryPayload, WsServerMessage } from '@shared/types';
+import { clientMessageSchema } from '@shared/protocol';
+import type { CoopStatePayload, MissionPlan, TelemetryPayload } from '@shared/types';
 import {
-  Car,
-  Bot,
   ChevronLeft,
   ChevronRight,
   Camera,
@@ -59,18 +70,13 @@ import {
   MapPin,
   Minimize2,
   Moon,
+  Power,
   Sun,
   User as UserIcon,
   Pencil,
   Mail,
   ShieldCheck,
   Activity,
-  Users,
-  MessagesSquare,
-  Copy,
-  Link2,
-  Route,
-  Mic,
   Wifi,
   WifiOff,
   Cpu,
@@ -80,24 +86,12 @@ import {
   Video as VideoIcon,
 } from 'lucide-react';
 
-const MapPanel = lazy(async () => {
-  const mod = await import('@/app/components/realtime/MapPanel');
-  return { default: mod.MapPanel };
-});
-
 const VideoPanel = lazy(async () => {
   const mod = await import('@/app/components/realtime/VideoPanel');
   return { default: mod.VideoPanel };
 });
 
-interface GamepadState {
-  buttons: number[];
-  axes: number[];
-  connected: boolean;
-}
-
 interface ModulesState {
-  map: boolean;
   video: boolean;
   visualizer: boolean;
   stream: boolean;
@@ -109,70 +103,6 @@ interface VehicleState {
   location: string;
   charge: number;
   controlLeaseId?: string;
-}
-
-const AXIS_DEADZONE = 0.08;
-const ANALOG_EPS = 0.01;
-const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
-const round = (value: number, decimals: number) => {
-  const factor = Math.pow(10, decimals);
-  return Math.round(value * factor) / factor;
-};
-const normalizeAxis = (value: number) => {
-  const deadzoned = Math.abs(value) < AXIS_DEADZONE ? 0 : value;
-  return round(clamp(deadzoned, -1, 1), 2);
-};
-const normalizeButton = (value: number) => round(clamp(value, 0, 1), 2);
-const toRad = (value: number) => (value * Math.PI) / 180;
-const haversineMeters = (a: { lat: number; lng: number }, b: { lat: number; lng: number }) => {
-  const radius = 6371000;
-  const dLat = toRad(b.lat - a.lat);
-  const dLng = toRad(b.lng - a.lng);
-  const lat1 = toRad(a.lat);
-  const lat2 = toRad(b.lat);
-  const sinDLat = Math.sin(dLat / 2);
-  const sinDLng = Math.sin(dLng / 2);
-  const calc = sinDLat * sinDLat + Math.cos(lat1) * Math.cos(lat2) * sinDLng * sinDLng;
-  return 2 * radius * Math.asin(Math.min(1, Math.sqrt(calc)));
-};
-const hasStateChanged = (prev: TelemetryPayload | null, next: TelemetryPayload) => {
-  if (!prev) return true;
-  if (prev.buttons.length !== next.buttons.length || prev.axes.length !== next.axes.length) return true;
-  for (let i = 0; i < prev.buttons.length; i += 1) {
-    if (Math.abs(prev.buttons[i] - next.buttons[i]) > ANALOG_EPS) return true;
-  }
-  for (let i = 0; i < prev.axes.length; i += 1) {
-    if (Math.abs(prev.axes[i] - next.axes[i]) > ANALOG_EPS) return true;
-  }
-  return false;
-};
-const hasGamepadUiChanged = (
-  prev: GamepadState,
-  nextButtons: number[],
-  nextAxes: number[],
-  connected: boolean
-) => {
-  if (prev.connected !== connected) return true;
-  if (prev.buttons.length !== nextButtons.length || prev.axes.length !== nextAxes.length) return true;
-  for (let i = 0; i < prev.buttons.length; i += 1) {
-    if (Math.abs(prev.buttons[i] - nextButtons[i]) > ANALOG_EPS) return true;
-  }
-  for (let i = 0; i < prev.axes.length; i += 1) {
-    if (Math.abs(prev.axes[i] - nextAxes[i]) > ANALOG_EPS) return true;
-  }
-  return false;
-};
-
-function OpsPanelFallback(props: { title: string }) {
-  return (
-    <section className="rounded-xl border border-border bg-card p-4">
-      <header className="mb-3 flex items-center justify-between">
-        <h3 className="text-sm font-semibold">{props.title}</h3>
-        <span className="text-xs text-muted-foreground">Loading</span>
-      </header>
-      <div className="h-56 w-full animate-pulse rounded-lg bg-muted/60" />
-    </section>
-  );
 }
 
 export function ControllerPage() {
@@ -197,9 +127,6 @@ export function ControllerPage() {
   const [inputPaused, setInputPaused] = useState(false);
   const [pauseLatched, setPauseLatched] = useState(false);
   const [estopLatched, setEstopLatched] = useState(false);
-  const [driveMode, setDriveMode] = useState<'manual' | 'auto'>('manual');
-  const [followVehicleMap, setFollowVehicleMap] = useState(true);
-  const [deviceOnline, setDeviceOnline] = useState(false);
   const [deviceStatus, setDeviceStatus] = useState<{
     online: boolean;
     lastSeenMs: number;
@@ -209,22 +136,13 @@ export function ControllerPage() {
   }>({ online: false, lastSeenMs: 0 });
   const [deviceOverlayOpen, setDeviceOverlayOpen] = useState(false);
   const [controllerOverlayOpen, setControllerOverlayOpen] = useState(false);
-  const [controllerInfo, setControllerInfo] = useState<{ id: string; mapping?: string; battery?: number | null }>({
-    id: 'Unknown',
-  });
   const [missions, setMissions] = useState<MissionPlan[]>([]);
   const [draftMission, setDraftMission] = useState<MissionPlan | null>(null);
-  const [selectedMissionId, setSelectedMissionId] = useState<string>('');
-  const [pendingMission, setPendingMission] = useState<MissionPlan | null>(null);
-  const [missionPrompt, setMissionPrompt] = useState<'none' | 'select' | 'confirm'>('none');
-  const [activeMissionId, setActiveMissionId] = useState<string | null>(null);
-  const [batteryLevel, setBatteryLevel] = useState<number | null>(null);
   const [hidSupported, setHidSupported] = useState(false);
   const [hidSecure, setHidSecure] = useState(false);
   const [hidDevice, setHidDevice] = useState<HIDDevice | null>(null);
   const [hidProfile, setHidProfile] = useState<'ds4' | 'dualsense' | 'unknown' | null>(null);
   const [lightbarColor, setLightbarColor] = useState('#4f46e5');
-  const [hapticsSupported, setHapticsSupported] = useState<boolean | null>(null);
   const [terminalOutput, setTerminalOutput] = useState<string[]>([]);
   const [serverTelemetryAck, setServerTelemetryAck] = useState<{
     received: number;
@@ -232,23 +150,19 @@ export function ControllerPage() {
   }>({ received: 0, lastAckTs: null });
   const [visualizerHeight, setVisualizerHeight] = useState(700);
   const [visualizerMaxHeight, setVisualizerMaxHeight] = useState(700);
-  const [routeFocusSignal, setRouteFocusSignal] = useState(0);
   const [mapRegionLabel, setMapRegionLabel] = useState<string>('');
   const [modules, setModules] = useState<ModulesState>({
-    map: true,
     video: true,
-    visualizer: true,
+    visualizer: false,
     stream: true,
   });
   const [activeMainTab, setActiveMainTab] = useState<'ops' | 'status' | 'stream'>('ops');
   const [navOpen, setNavOpen] = useState(false);
-  const [insightOverlay, setInsightOverlay] = useState<'user' | 'coop' | 'diagnostics' | null>(null);
+  const [insightOverlay, setInsightOverlay] = useState<'user' | 'diagnostics' | null>(null);
   const [userEditOpen, setUserEditOpen] = useState(false);
   const [userAvatarEditOpen, setUserAvatarEditOpen] = useState(false);
   const [userDraftName, setUserDraftName] = useState('');
   const [userDraftEmail, setUserDraftEmail] = useState('');
-  const [coopChatOpen, setCoopChatOpen] = useState(false);
-  const [coopMessageInput, setCoopMessageInput] = useState('');
   const [inviteCopied, setInviteCopied] = useState(false);
   const [coopState, setCoopState] = useState<CoopStatePayload>({
     sessionId: '',
@@ -265,15 +179,13 @@ export function ControllerPage() {
     activeDays: 0,
   });
 
-  const terminalRef = useRef<HTMLDivElement>(null);
   const visualizerRef = useRef<HTMLIFrameElement>(null);
   const visualizerContainerRef = useRef<HTMLDivElement>(null);
-  const animationFrameId = useRef<number>();
   const wsRef = useRef<WebSocket | null>(null);
   const telemetryWsRef = useRef<WebSocket | null>(null);
   const telemetryPauseUntilRef = useRef(0);
+  const telemetryCountRef = useRef(0);
   const lastPayloadRef = useRef<TelemetryPayload | null>(null);
-  const controlSeqRef = useRef(0);
   const leaseWarningRef = useRef(false);
   const terminalQueueRef = useRef<string[]>([]);
   const lastDeviceOnlineRef = useRef<boolean | null>(null);
@@ -285,17 +197,9 @@ export function ControllerPage() {
   const prevModeButtonRef = useRef(false);
   const prevConfirmButtonRef = useRef(false);
   const prevCancelButtonRef = useRef(false);
-  const missionPromptRef = useRef<'none' | 'select' | 'confirm'>('none');
-  const pendingMissionRef = useRef<MissionPlan | null>(null);
   const missionsRef = useRef<MissionPlan[]>([]);
-  const selectedMissionIdRef = useRef<string>('');
-  const activeMissionIdRef = useRef<string | null>(null);
-  const draftMissionRef = useRef<MissionPlan | null>(null);
   const prevMissionAxisRef = useRef(0);
   const lastMissionAxisSwitchRef = useRef(0);
-  const driveModeRef = useRef<'manual' | 'auto'>('manual');
-  const lastAutoControlSentRef = useRef(0);
-  const hapticsSupportedRef = useRef<boolean | null>(null);
   const maxHeightRef = useRef(0);
   const lastGamepadUiUpdateRef = useRef(0);
   const sessionStatsRef = useRef({
@@ -353,122 +257,116 @@ export function ControllerPage() {
     return params.get('spectator') === '1';
   }, [location.search]);
   const { presence, updatePresence, isOwner: isPresenceOwner } = usePresence(vehicleId);
+  const {
+    driveMode,
+    setDriveMode,
+    controlLeaseId,
+    setControlLeaseId,
+    selectedMissionId,
+    setSelectedMissionId,
+    pendingMission,
+    setPendingMission,
+    missionPrompt,
+    setMissionPrompt,
+    activeMissionId,
+    setActiveMissionId,
+    driveModeRef,
+    missionPromptRef,
+    pendingMissionRef,
+    selectedMissionIdRef,
+    activeMissionIdRef,
+    draftMissionRef,
+    controlSeqRef,
+    lastAutoControlSentRef,
+    controlLeaseIdRef,
+  } = useControllerSession({
+    vehicleId,
+    user,
+    isSpectatorSession,
+    isPresenceOwner,
+    presence,
+    updatePresence,
+    initialDriveMode: 'manual',
+    initialControlLeaseId: vehicle?.controlLeaseId ?? null,
+  });
+  const {
+    deviceOnline,
+    setDeviceOnline,
+    controllerInfo,
+    batteryLevel,
+    setBatteryLevel,
+    hapticsSupported,
+    setHapticsSupported,
+    hapticsSupportedRef,
+  } = useControllerIndicators({
+    presence,
+    isPresenceOwner,
+    updatePresence,
+  });
   const viewerId = user?.id || 'anon-viewer';
   const roomId = useMemo(() => `vehicle-room-${vehicleId}`, [vehicleId]);
   const canUseHid = hidSupported && hidSecure;
   const coopParticipants = coopState.participants;
-  const coopMessages = coopState.messages;
-  const coopVehicles = coopState.vehicles.filter((entry) => entry.vehicleId !== vehicleId);
-  const sharedSessionRoute = coopState.sharedRoute?.route || null;
   const isCoopHost = Boolean(user?.id && coopState.hostUserId === user.id);
-  const driverCount = coopParticipants.filter((entry) => entry.role !== 'spectator').length;
-  const spectatorCount = coopParticipants.filter((entry) => entry.role === 'spectator').length;
   const inviteUrl =
     typeof window !== 'undefined' && coopState.invitePath
       ? `${window.location.origin}${coopState.invitePath}`
       : '';
 
-  const { wsRef: controlWsRef, isConnected: isControlWsConnected } = useReconnectingWebSocket({
+  const { wsRef: controlSocketRef, isConnected: isControlWsConnected } = useControlSocket({
     url: wsUrl,
-    onOpen: (ws) => {
-      const hello = clientMessageSchema.safeParse({
-        type: 'hello',
-        protocolVersion: PROTOCOL_VERSION,
-        vehicleId,
-      });
-      if (hello.success) {
-        ws.send(JSON.stringify(hello.data));
-      }
+    vehicleId,
+    onOpen: () => {
       addTerminalLine('Control WebSocket connected to server');
     },
-    onClose: () => {
-      addTerminalLine('Control WebSocket disconnected; retrying...');
+    onDeviceStatus: (status) => {
+      setDeviceOnline(status.online);
+      setDeviceStatus(status);
+      if (status.online && lastDeviceOnlineRef.current !== true) {
+        addTerminalLine(`Device heartbeat received for ${vehicleId}.`);
+      }
+      lastDeviceOnlineRef.current = status.online;
     },
-    onError: () => {
-      addTerminalLine('Control WebSocket connection error');
+    onError: (message) => {
+      addTerminalLine(`Server error: ${message}`);
     },
-    onMessage: (event) => {
-      if (typeof event.data !== 'string') return;
-      const parsed = parseServerMessage(event.data);
-      if (!parsed) return;
-      if (parsed.type === 'cpp') {
-        addTerminalLine(`Server: ${parsed.text}`);
+    onServerMessage: (message) => {
+      if (message.type === 'cpp') {
+        addTerminalLine(`Server: ${message.text}`);
+        return;
       }
-      if (parsed.type === 'input_ack') {
-        setServerTelemetryAck({ received: parsed.received, lastAckTs: parsed.ts });
+      if (message.type === 'input_ack') {
+        setServerTelemetryAck({ received: message.received, lastAckTs: message.ts });
+        return;
       }
-      if (parsed.type === 'device_status' && parsed.vehicleId === vehicleId) {
-        setDeviceOnline(parsed.online);
-        setDeviceStatus({
-          online: parsed.online,
-          lastSeenMs: parsed.lastSeenMs,
-          deviceId: parsed.deviceId,
-          ip: parsed.ip,
-          fw: parsed.fw,
-        });
-        if (parsed.online && lastDeviceOnlineRef.current !== true) {
-          addTerminalLine(`Device heartbeat received for ${vehicleId}.`);
-        }
-        lastDeviceOnlineRef.current = parsed.online;
+      if (message.type === 'coop_state' && (!sessionId || message.payload.sessionId === sessionId)) {
+        setCoopState(message.payload);
+        return;
       }
-      if (parsed.type === 'coop_state' && (!sessionId || parsed.payload.sessionId === sessionId)) {
-        setCoopState(parsed.payload);
-      }
-      if (parsed.type === 'coop_chat' && (!sessionId || parsed.payload.sessionId === sessionId)) {
+      if (message.type === 'coop_chat' && (!sessionId || message.payload.sessionId === sessionId)) {
         setCoopState((prev) => ({
           ...prev,
-          messages: [...prev.messages, parsed.payload].slice(-50),
+          messages: [...prev.messages, message.payload].slice(-50),
         }));
       }
-      if (parsed.type === 'error') {
-        addTerminalLine(`Server error: ${parsed.message}`);
-        if (parsed.message.includes(`Device heartbeat timed out for ${vehicleId}`)) {
-          setDeviceOnline(false);
-          setDeviceStatus((prev) => ({
-            ...prev,
-            online: false,
-            lastSeenMs: Date.now(),
-          }));
-          lastDeviceOnlineRef.current = false;
-        }
-      }
     },
   });
 
-  const { wsRef: telemetryWsRefHook } = useReconnectingWebSocket({
+  const { wsRef: telemetrySocketRef } = useTelemetrySocket({
     url: telemetryWsUrl,
-    onOpen: (ws) => {
-      const hello = clientMessageSchema.safeParse({
-        type: 'hello',
-        protocolVersion: PROTOCOL_VERSION,
-        vehicleId,
-      });
-      if (hello.success) {
-        ws.send(JSON.stringify(hello.data));
-      }
-      setServerTelemetryAck({ received: 0, lastAckTs: null });
-      addTerminalLine('Telemetry WebSocket connected to server');
+    vehicleId,
+    onError: (message) => {
+      addTerminalLine(message);
     },
-    onClose: () => {
-      addTerminalLine('Telemetry WebSocket disconnected; retrying...');
-    },
-    onError: () => {
-      addTerminalLine('Telemetry WebSocket connection error');
-    },
-    onMessage: (event) => {
-      if (typeof event.data !== 'string') return;
-      const parsed = parseServerMessage(event.data);
-      if (!parsed) return;
-      if (parsed.type === 'slow_down') {
-        telemetryPauseUntilRef.current = Date.now() + parsed.retryAfterMs;
+    onServerMessage: (message) => {
+      if (message.type === 'slow_down') {
+        telemetryPauseUntilRef.current = Date.now() + message.retryAfterMs;
       }
     },
   });
 
-  wsRef.current = controlWsRef.current;
-  telemetryWsRef.current = telemetryWsRefHook.current;
-
-  const [controlLeaseId, setControlLeaseId] = useState<string | null>(vehicle?.controlLeaseId ?? null);
+  wsRef.current = controlSocketRef.current;
+  telemetryWsRef.current = telemetrySocketRef.current;
 
   useEffect(() => {
     setCoopState({
@@ -540,74 +438,11 @@ export function ControllerPage() {
     if (!isFocusedDisplay) return;
     setActiveMainTab('ops');
     setModules({
-      map: isFocusMap,
       video: isFocusVideo,
       visualizer: isFocusControl,
       stream: isFocusControl,
     });
   }, [isFocusedDisplay, isFocusMap, isFocusVideo, isFocusControl]);
-
-  useEffect(() => {
-    if (isPresenceOwner) return;
-    if (presence.controlLeaseId !== undefined && presence.controlLeaseId !== controlLeaseId) {
-      setControlLeaseId(presence.controlLeaseId ?? null);
-    }
-  }, [presence.controlLeaseId, controlLeaseId, isPresenceOwner]);
-
-  useEffect(() => {
-    updatePresence({ controlLeaseId });
-  }, [controlLeaseId, updatePresence]);
-
-  useEffect(() => {
-    if (isPresenceOwner) return;
-    if (presence.deviceOnline !== undefined && presence.deviceOnline !== deviceOnline) {
-      setDeviceOnline(presence.deviceOnline);
-    }
-  }, [presence.deviceOnline, deviceOnline, isPresenceOwner]);
-
-  useEffect(() => {
-    updatePresence({ deviceOnline });
-  }, [deviceOnline, updatePresence]);
-
-  useEffect(() => {
-    updatePresence({ gamepadConnected: gamepadState.connected });
-  }, [gamepadState.connected, updatePresence]);
-
-  useEffect(() => {
-    const readControllerInfo = () => {
-      const pads = navigator.getGamepads ? navigator.getGamepads() : [];
-      const pad =
-        Array.from(pads).find((item): item is Gamepad => Boolean(item && item.connected)) || null;
-      if (!pad) {
-        setControllerInfo({ id: 'Unknown' });
-        return;
-      }
-      const battery =
-        typeof (pad as unknown as { battery?: { level?: number | null } }).battery?.level === 'number'
-          ? (pad as unknown as { battery?: { level?: number | null } }).battery?.level ?? null
-          : null;
-      setControllerInfo({
-        id: pad.id || 'Gamepad',
-        mapping: pad.mapping,
-        battery,
-      });
-    };
-    readControllerInfo();
-    const interval = window.setInterval(readControllerInfo, 1000);
-    return () => {
-      window.clearInterval(interval);
-    };
-  }, [gamepadState.connected, hidDevice]);
-
-  const parseServerMessage = (raw: string): WsServerMessage | null => {
-    try {
-      const parsed = JSON.parse(raw);
-      const result = serverMessageSchema.safeParse(parsed);
-      return result.success ? result.data : null;
-    } catch {
-      return null;
-    }
-  };
 
   const addTerminalLine = useCallback((line: string) => {
     terminalQueueRef.current.push(`[${new Date().toLocaleTimeString()}] ${line}`);
@@ -700,9 +535,19 @@ export function ControllerPage() {
     missions.forEach((entry) => next.push(entry));
     return next;
   }, [draftMission, missions]);
+  const missionListRef = useRef<HTMLDivElement | null>(null);
+  const prevMissionScrollDirRef = useRef(0);
+  const lastMissionScrollRef = useRef(0);
 
   const formatWaypointPreview = (lat: number, lng: number) =>
     `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+
+  const scrollMissionList = useCallback((direction: -1 | 1) => {
+    missionListRef.current?.scrollBy({
+      top: direction * 64,
+      behavior: 'smooth',
+    });
+  }, []);
 
   const cycleMissionSelection = useCallback((direction: -1 | 1) => {
     const saved = missionsRef.current;
@@ -739,27 +584,51 @@ export function ControllerPage() {
     }
     return null;
   }, [selectedMission]);
-  const displayWaypoints = useMemo(() => {
-    if (pendingMission?.waypoints?.length) return pendingMission.waypoints;
-    if (selectedMission?.waypoints?.length) return selectedMission.waypoints;
-    if (draftMission?.waypoints?.length) return draftMission.waypoints;
-    return [];
-  }, [draftMission?.waypoints, pendingMission?.waypoints, selectedMission?.waypoints]);
-
-  useEffect(() => {
-    if (!selectedMission || !selectedMission.waypoints || selectedMission.waypoints.length < 2) return;
-    setFollowVehicleMap(false);
-    setRouteFocusSignal((prev) => prev + 1);
-  }, [selectedMission]);
-
-  useEffect(() => {
-    if (!selectedMissionRoute) return;
-    setFollowVehicleMap(false);
-    setRouteFocusSignal((prev) => prev + 1);
-  }, [selectedMissionRoute]);
-
   const shouldShowMissionOverlay =
     missionPrompt !== 'none' && Boolean(vehicle) && !location.pathname.startsWith('/admin');
+
+  useEffect(() => {
+    if (missionPrompt !== 'select') return;
+    missionListRef.current?.focus();
+  }, [missionPrompt]);
+
+  useEffect(() => {
+    if (missionPrompt !== 'select') return;
+    const handleMissionListKey = (event: KeyboardEvent) => {
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        scrollMissionList(1);
+        return;
+      }
+      if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        scrollMissionList(-1);
+        return;
+      }
+      if (event.key === 'PageDown') {
+        event.preventDefault();
+        missionListRef.current?.scrollBy({ top: 192, behavior: 'smooth' });
+        return;
+      }
+      if (event.key === 'PageUp') {
+        event.preventDefault();
+        missionListRef.current?.scrollBy({ top: -192, behavior: 'smooth' });
+        return;
+      }
+      if (event.key === 'Home') {
+        event.preventDefault();
+        missionListRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+      if (event.key === 'End') {
+        event.preventDefault();
+        const target = missionListRef.current;
+        target?.scrollTo({ top: target.scrollHeight, behavior: 'smooth' });
+      }
+    };
+    window.addEventListener('keydown', handleMissionListKey);
+    return () => window.removeEventListener('keydown', handleMissionListKey);
+  }, [missionPrompt, scrollMissionList]);
 
   useEffect(() => {
     if (!vehicleId) return;
@@ -777,24 +646,8 @@ export function ControllerPage() {
   }, [vehicleId]);
 
   useEffect(() => {
-    missionPromptRef.current = missionPrompt;
-  }, [missionPrompt]);
-
-  useEffect(() => {
-    pendingMissionRef.current = pendingMission;
-  }, [pendingMission]);
-
-  useEffect(() => {
     missionsRef.current = missions;
   }, [missions]);
-
-  useEffect(() => {
-    selectedMissionIdRef.current = selectedMissionId;
-  }, [selectedMissionId]);
-
-  useEffect(() => {
-    activeMissionIdRef.current = activeMissionId;
-  }, [activeMissionId]);
 
   useEffect(() => {
     draftMissionRef.current = draftMission;
@@ -921,6 +774,10 @@ export function ControllerPage() {
   }, [refreshMissions, vehicle]);
 
   useEffect(() => {
+    updatePresence({ gamepadConnected: gamepadState.connected });
+  }, [gamepadState.connected, updatePresence]);
+
+  useEffect(() => {
     if (!vehicleId) return;
     const key = STORAGE_KEYS.missionDraft(vehicleId);
     const loadDraft = () => {
@@ -956,51 +813,6 @@ export function ControllerPage() {
   }, [vehicle, navigate]);
 
   useEffect(() => {
-    let cancelled = false;
-    const hydrateLease = async () => {
-      try {
-        const vehicles = await getVehicles();
-        const match = vehicles.find((item) => item.id === vehicleId);
-        if (cancelled) return;
-        setControlLeaseId(match?.controlLeaseId ?? null);
-      } catch (error) {
-        if (!cancelled) {
-          console.warn('Failed to fetch control lease:', error);
-        }
-      }
-    };
-    if (vehicle?.controlLeaseId) {
-      setControlLeaseId(vehicle.controlLeaseId);
-      return;
-    }
-    void hydrateLease();
-    return () => {
-      cancelled = true;
-    };
-  }, [vehicle?.controlLeaseId, vehicleId]);
-
-  useEffect(() => {
-    if (!vehicle || !user) return;
-    let cancelled = false;
-    const acquireLease = async () => {
-      try {
-        const vehicles = await markVehicleInUse(vehicle.id, user.username, user.id);
-        if (cancelled) return;
-        const match = vehicles.find((item) => item.id === vehicle.id);
-        setControlLeaseId(match?.controlLeaseId ?? null);
-      } catch (error) {
-        if (!cancelled) {
-          console.warn('Failed to mark vehicle in use:', error);
-        }
-      }
-    };
-    void acquireLease();
-    return () => {
-      cancelled = true;
-    };
-  }, [vehicle, user]);
-
-  useEffect(() => {
     if (controlLeaseId) {
       leaseWarningRef.current = false;
     }
@@ -1015,244 +827,107 @@ export function ControllerPage() {
     }
   }, [pauseLatched, estopLatched]);
 
-  useEffect(() => {
-    if (isPresenceOwner) return;
-    if (presence.driveMode && presence.driveMode !== driveMode) {
-      setDriveMode(presence.driveMode);
-    }
-  }, [presence.driveMode, driveMode, isPresenceOwner]);
-
-  useEffect(() => {
-    updatePresence({ driveMode });
-  }, [driveMode, updatePresence]);
-
-  useEffect(() => {
-    driveModeRef.current = driveMode;
-  }, [driveMode]);
-
-  useEffect(() => {
-    if (!vehicle) return;
-
-    const pollGamepad = () => {
-      const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
-      const gamepad =
-        Array.from(gamepads).find((pad): pad is Gamepad => Boolean(pad && pad.connected)) || null;
-      const now = Date.now();
-      if (gamepad) {
-        const buttons = gamepad.buttons.map((button) =>
-          normalizeButton(typeof button.value === 'number' ? button.value : button.pressed ? 1 : 0)
-        );
-        const axes = Array.from(gamepad.axes, (axis) => normalizeAxis(axis));
-        const pausePressed = buttons[8] > 0.5;
-        const modePressed = buttons[9] > 0.5;
-        const confirmPressed = buttons[0] > 0.5;
-        const cancelPressed = buttons[1] > 0.5;
-        const estopPressed = buttons[16] > 0.5;
-        const pauseRising = pausePressed && !prevPauseButtonRef.current;
-        const modeRising = modePressed && !prevModeButtonRef.current;
-        const confirmRising = confirmPressed && !prevConfirmButtonRef.current;
-        const cancelRising = cancelPressed && !prevCancelButtonRef.current;
-        const estopRising = estopPressed && !prevEstopButtonRef.current;
-
-        if (pauseRising && !estopLatched) {
-          setPauseLatched((prev) => !prev);
-        }
-        if (modeRising && !estopLatched) {
-          if (driveModeRef.current === 'manual') {
-            requestAutoMode();
-          } else {
-            setDriveMode('manual');
-            setActiveMissionId(null);
-            sendControlMode('manual');
-            addTerminalLine('Drive mode set to MANUAL');
-          }
-        }
-        if (confirmRising && missionPromptRef.current === 'confirm' && pendingMissionRef.current) {
-          confirmMission(pendingMissionRef.current);
-        }
-        if (confirmRising && missionPromptRef.current === 'select') {
-          const selected =
-            (draftMissionRef.current && selectedMissionIdRef.current === draftMissionRef.current.id
-              ? draftMissionRef.current
-              : null) || resolveSelectedMission();
-          if (selected) {
-            setPendingMission(selected);
-            setMissionPrompt('confirm');
-          } else {
-            void refreshMissions();
-          }
-        }
-        if (cancelRising && missionPromptRef.current !== 'none') {
-          cancelMissionPrompt();
-        }
-        if (estopRising) {
-          setEstopLatched((prev) => {
-            const next = !prev;
-            if (next) {
-              setPauseLatched(true);
-            } else {
-              setPauseLatched(false);
-            }
-            return next;
-          });
-        }
-
-        prevPauseButtonRef.current = pausePressed;
-        prevModeButtonRef.current = modePressed;
-        prevConfirmButtonRef.current = confirmPressed;
-        prevCancelButtonRef.current = cancelPressed;
-        prevEstopButtonRef.current = estopPressed;
-
-        const dpadRight = buttons[15] > 0.5;
-        const dpadLeft = buttons[14] > 0.5;
-        const dpadDir = dpadRight ? 1 : dpadLeft ? -1 : 0;
-        if (missionPromptRef.current !== 'none' && dpadDir !== 0) {
-          const nowMs = Date.now();
-          if (nowMs - lastMissionAxisSwitchRef.current > 250 && dpadDir !== prevMissionAxisRef.current) {
-            cycleMissionSelection(dpadDir as -1 | 1);
-            lastMissionAxisSwitchRef.current = nowMs;
-            prevMissionAxisRef.current = dpadDir;
-          }
-        }
-        if (dpadDir === 0) {
-          prevMissionAxisRef.current = 0;
-        }
-
-        // Throttle React state updates for UI (~15fps) to avoid 60fps re-renders; telemetry stays real-time
-        if (now - lastGamepadUiUpdateRef.current >= GAMEPAD_UI_THROTTLE_MS) {
-          lastGamepadUiUpdateRef.current = now;
-          setGamepadState((prev) =>
-            hasGamepadUiChanged(prev, buttons, axes, true) ? { buttons, axes, connected: true } : prev
-          );
-
-          const battery = (gamepad as any)?.battery?.level;
-          if (typeof battery === 'number' && !Number.isNaN(battery)) {
-            const nextBattery = Math.round(clamp(battery, 0, 1) * 100);
-            setBatteryLevel((prev) => (prev === nextBattery ? prev : nextBattery));
-          }
-        }
-
-        const supportsHaptics = !!(gamepad as any)?.vibrationActuator || !!(gamepad as any)?.hapticActuators?.length;
-        if (supportsHaptics !== hapticsSupportedRef.current) {
-          hapticsSupportedRef.current = supportsHaptics;
-          setHapticsSupported(supportsHaptics);
-        }
-
-        const payload: TelemetryPayload = {
-          buttons,
-          axes,
-          vehicleId: vehicle.id,
-          leaseId: controlLeaseId ?? undefined,
-        };
-        const activeMode = driveModeRef.current;
-        const slowDownUntil = telemetryPauseUntilRef.current;
-        if (Date.now() < slowDownUntil) {
-          prevPauseButtonRef.current = pausePressed;
-          prevModeButtonRef.current = modePressed;
-          prevConfirmButtonRef.current = confirmPressed;
-          prevCancelButtonRef.current = cancelPressed;
-          prevEstopButtonRef.current = estopPressed;
-          animationFrameId.current = requestAnimationFrame(pollGamepad);
-          return;
-        }
-        if (!pausedRef.current && hasStateChanged(lastPayloadRef.current, payload)) {
-          lastPayloadRef.current = payload;
-          sendClientMessage({ type: 'input', payload, vehicleId: vehicle.id });
-          if (!controlLeaseId) {
-            if (!leaseWarningRef.current) {
-              leaseWarningRef.current = true;
-              addTerminalLine('Control lease missing; re-select vehicle to start a control session.');
-            }
-          } else {
-            if (activeMode === 'manual') {
-              sendClientMessage({
-                type: 'control',
-                vehicleId: vehicle.id,
-                payload: {
-                  seq: controlSeqRef.current++,
-                  leaseId: controlLeaseId,
-                  buttons,
-                  axes,
-                  mode: 'manual',
-                },
-              });
-            }
-          }
-          void enqueueTelemetry(payload, { userId: user?.id, vehicleId: vehicle.id });
-          pendingTelemetryRef.current = JSON.stringify(payload);
-        }
-
-        if (!pausedRef.current && controlLeaseId && activeMode === 'auto') {
-          const AUTO_HEARTBEAT_MS = 1000;
-          if (modeRising || now - lastAutoControlSentRef.current >= AUTO_HEARTBEAT_MS) {
-            lastAutoControlSentRef.current = now;
-            sendClientMessage({
-              type: 'control',
-              vehicleId: vehicle.id,
-              payload: {
-                seq: controlSeqRef.current++,
-                leaseId: controlLeaseId,
-                buttons,
-                axes,
-                mode: 'auto',
-              },
-            });
-          }
-        }
-      } else {
-        if (now - lastGamepadUiUpdateRef.current >= GAMEPAD_UI_THROTTLE_MS) {
-          lastGamepadUiUpdateRef.current = now;
-          setGamepadState((prev) => (prev.connected ? { ...prev, connected: false } : prev));
-        }
-        lastPayloadRef.current = null;
-      }
-      animationFrameId.current = requestAnimationFrame(pollGamepad);
-    };
-
-    animationFrameId.current = requestAnimationFrame(pollGamepad);
-
-    const handleGamepadConnected = (e: GamepadEvent) => {
-      addTerminalLine(`Gamepad connected: ${e.gamepad.id}`);
-      const buttons = e.gamepad.buttons.map((button) =>
-        normalizeButton(typeof button.value === 'number' ? button.value : button.pressed ? 1 : 0)
-      );
-      const axes = Array.from(e.gamepad.axes, (axis) => normalizeAxis(axis));
-      setGamepadState((prev) =>
-        hasGamepadUiChanged(prev, buttons, axes, true) ? { buttons, axes, connected: true } : prev
-      );
-    };
-    const handleGamepadDisconnected = () => {
-      addTerminalLine('Gamepad disconnected');
-      const anyConnected = Array.from(navigator.getGamepads ? navigator.getGamepads() : []).some(
-        (pad) => !!pad && pad.connected
-      );
-      if (!anyConnected) {
-        setGamepadState((prev) => (prev.connected ? { ...prev, connected: false } : prev));
-      }
-    };
-    window.addEventListener('gamepadconnected', handleGamepadConnected);
-    window.addEventListener('gamepaddisconnected', handleGamepadDisconnected);
-
-    return () => {
-      if (animationFrameId.current) cancelAnimationFrame(animationFrameId.current);
-      window.removeEventListener('gamepadconnected', handleGamepadConnected);
-      window.removeEventListener('gamepaddisconnected', handleGamepadDisconnected);
-    };
-  }, [
-    addTerminalLine,
-    cancelMissionPrompt,
-    confirmMission,
-    controlLeaseId,
-    cycleMissionSelection,
-    estopLatched,
-    refreshMissions,
-    requestAutoMode,
+  useGamepadLoop({
+    vehicleId,
+    userId: user?.id,
+    controlWsRef: wsRef,
+    telemetryWsRef,
+    controlLeaseIdRef,
+    driveModeRef,
+    controlSeqRef,
+    lastAutoControlSentRef,
+    missionPromptRef,
+    pendingMissionRef,
+    draftMissionRef,
+    missionsRef,
+    selectedMissionIdRef,
+    activeMissionIdRef,
+    prevModeButtonRef,
+    prevConfirmButtonRef,
+    prevCancelButtonRef,
+    prevMissionAxisRef,
+    lastMissionAxisSwitchRef,
+    telemetryCountRef,
+    lastPayloadRef,
+    telemetryPauseUntilRef,
+    inputBlockedRef: pausedRef,
+    onGamepadConnectionChange: (connected) => {
+      setGamepadState((prev) => (prev.connected === connected ? prev : { ...prev, connected }));
+    },
+    onEnqueueTelemetry: (payload) => {
+      pendingTelemetryRef.current = JSON.stringify(payload);
+      void enqueueTelemetry(payload, { userId: user?.id, vehicleId });
+    },
+    onRequestAutoMode: requestAutoMode,
+    onCancelMissionPrompt: cancelMissionPrompt,
+    onConfirmMission: confirmMission,
     resolveSelectedMission,
-    sendClientMessage,
-    sendControlMode,
-    user?.id,
-    vehicle,
-  ]);
+    setPendingMission,
+    setMissionPrompt,
+    setSelectedMissionId: (id) => setSelectedMissionId(id ?? ''),
+    onGamepadSample: ({ gamepad, buttons, axes, now }) => {
+      const dpadDown = buttons[13] > 0.5;
+      const dpadUp = buttons[12] > 0.5;
+      const missionScrollDir = dpadDown ? 1 : dpadUp ? -1 : 0;
+      if (missionPromptRef.current === 'select' && missionScrollDir !== 0) {
+        if (
+          now - lastMissionScrollRef.current > 250 &&
+          missionScrollDir !== prevMissionScrollDirRef.current
+        ) {
+          scrollMissionList(missionScrollDir as -1 | 1);
+          lastMissionScrollRef.current = now;
+          prevMissionScrollDirRef.current = missionScrollDir;
+        }
+      }
+      if (missionScrollDir === 0) {
+        prevMissionScrollDirRef.current = 0;
+      }
+
+      const pausePressed = buttons[8] > 0.5;
+      const estopPressed = buttons[16] > 0.5;
+      const pauseRising = pausePressed && !prevPauseButtonRef.current;
+      const estopRising = estopPressed && !prevEstopButtonRef.current;
+
+      if (pauseRising && !estopLatched) {
+        setPauseLatched((prev) => !prev);
+      }
+      if (estopRising) {
+        setEstopLatched((prev) => {
+          const next = !prev;
+          setPauseLatched(next);
+          return next;
+        });
+      }
+
+      prevPauseButtonRef.current = pausePressed;
+      prevEstopButtonRef.current = estopPressed;
+
+      if (now - lastGamepadUiUpdateRef.current >= GAMEPAD_UI_THROTTLE_MS) {
+        lastGamepadUiUpdateRef.current = now;
+        setGamepadState((prev) =>
+          hasGamepadUiChanged(prev, buttons, axes, true) ? { buttons, axes, connected: true } : prev
+        );
+
+        const battery = (gamepad as Gamepad & { battery?: { level?: number | null } }).battery?.level;
+        if (typeof battery === 'number' && !Number.isNaN(battery)) {
+          const nextBattery = Math.round(clamp(battery, 0, 1) * 100);
+          setBatteryLevel((prev) => (prev === nextBattery ? prev : nextBattery));
+        }
+      }
+
+      const supportsHaptics = !!(gamepad as any)?.vibrationActuator || !!(gamepad as any)?.hapticActuators?.length;
+      if (supportsHaptics !== hapticsSupportedRef.current) {
+        hapticsSupportedRef.current = supportsHaptics;
+        setHapticsSupported(supportsHaptics);
+      }
+    },
+    onLeaseMissing: () => {
+      if (!leaseWarningRef.current) {
+        leaseWarningRef.current = true;
+        addTerminalLine('Control lease missing; re-select vehicle to start a control session.');
+      }
+    },
+  });
 
   useEffect(() => {
     setWsUrlInput(wsUrl);
@@ -1485,10 +1160,6 @@ export function ControllerPage() {
   }, [addTerminalLine, hidDevice, hidSupported]);
 
   useEffect(() => {
-    if (terminalRef.current) terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
-  }, [terminalOutput]);
-
-  useEffect(() => {
     setUserDraftName(user?.username || '');
     setUserDraftEmail(user?.email || '');
   }, [user?.email, user?.username]);
@@ -1547,13 +1218,13 @@ export function ControllerPage() {
     navigate('/');
   };
 
-  const handleOpenInsight = (view: 'user' | 'coop' | 'diagnostics') => {
+  const handleOpenInsight = (view: 'user' | 'diagnostics') => {
     setInsightOverlay(view);
     setNavOpen(false);
   };
 
   const handleSendCoopMessage = (nextText?: string) => {
-    const text = (nextText ?? coopMessageInput).trim();
+    const text = (nextText ?? '').trim();
     if (!text || !sessionId || !user?.id || !user.username) return;
     sendClientMessage({
       type: 'coop_chat',
@@ -1563,9 +1234,6 @@ export function ControllerPage() {
       username: user.username,
       text,
     });
-    if (!nextText) {
-      setCoopMessageInput('');
-    }
   };
 
   const handleStartCoopSession = () => {
@@ -1665,7 +1333,11 @@ export function ControllerPage() {
               >
                 <ChevronLeft className="size-4" />
               </Button>
-              <div className="max-h-48 overflow-y-auto rounded-lg border border-border/70 bg-muted/20 px-10 py-2 text-sm">
+              <div
+                ref={missionListRef}
+                tabIndex={0}
+                className="max-h-48 overflow-y-auto rounded-lg border border-border/70 bg-muted/20 px-10 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
                 {missionChoices.length ? (
                   <div className="grid gap-2">
                     {missionChoices.map((entry) => (
@@ -1891,276 +1563,6 @@ export function ControllerPage() {
       </OverlayModal>
 
       <OverlayModal
-        open={insightOverlay === 'coop'}
-        title="Co-op"
-        onClose={() => setInsightOverlay(null)}
-        maxWidthClassName="max-w-5xl"
-      >
-        <div className="grid gap-5">
-          <section className="relative overflow-hidden rounded-3xl border border-border/70 bg-[linear-gradient(135deg,rgba(15,23,42,0.96),rgba(8,47,73,0.92)_45%,rgba(20,83,45,0.88))] p-5 text-white shadow-xl">
-            <div className="absolute inset-y-0 right-0 w-1/2 bg-[radial-gradient(circle_at_top_right,rgba(56,189,248,0.26),transparent_55%)]" />
-            <div className="relative grid gap-5 lg:grid-cols-[1.45fr_0.95fr]">
-              <div className="grid gap-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="grid gap-2">
-                    <div className="inline-flex w-fit items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[11px] uppercase tracking-[0.24em] text-white/80">
-                      <Users className="size-3.5" />
-                      Mission Room
-                    </div>
-                    <div>
-                      <div className="text-2xl font-semibold">
-                        {sessionId ? `Session ${sessionId.slice(0, 8)}` : 'Create a coordinated driving session'}
-                      </div>
-                      <div className="mt-1 max-w-2xl text-sm text-white/70">
-                        Drivers, spectators, shared route context, and low-friction chat for synchronized vehicle ops.
-                      </div>
-                    </div>
-                  </div>
-                  {!sessionId ? (
-                    <Button size="sm" className="bg-white text-slate-950 hover:bg-white/90" onClick={handleStartCoopSession}>
-                      Start Room
-                    </Button>
-                  ) : (
-                    <div className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 text-right">
-                      <div className="text-[11px] uppercase tracking-[0.18em] text-white/60">Host</div>
-                      <div className="mt-1 text-sm font-medium">{coopState.hostUsername || 'Awaiting active driver'}</div>
-                    </div>
-                  )}
-                </div>
-
-                <div className="grid gap-3 sm:grid-cols-3">
-                  <div className="rounded-2xl border border-white/10 bg-white/10 p-4">
-                    <div className="text-[11px] uppercase tracking-[0.18em] text-white/60">Drivers</div>
-                    <div className="mt-2 text-2xl font-semibold">{driverCount}</div>
-                    <div className="mt-1 text-xs text-white/65">Controlling vehicles inside the room</div>
-                  </div>
-                  <div className="rounded-2xl border border-white/10 bg-white/10 p-4">
-                    <div className="text-[11px] uppercase tracking-[0.18em] text-white/60">Spectators</div>
-                    <div className="mt-2 text-2xl font-semibold">{spectatorCount}</div>
-                    <div className="mt-1 text-xs text-white/65">Read-only observers following the action</div>
-                  </div>
-                  <div className="rounded-2xl border border-white/10 bg-white/10 p-4">
-                    <div className="text-[11px] uppercase tracking-[0.18em] text-white/60">Shared Route</div>
-                    <div className="mt-2 text-sm font-semibold">
-                      {sharedSessionRoute ? coopState.sharedRoute?.label || 'Route live' : 'None shared'}
-                    </div>
-                    <div className="mt-1 text-xs text-white/65">
-                      {sharedSessionRoute ? `Published by ${coopState.sharedRoute?.author}` : 'Publish a route for coordinated movement'}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid gap-3 rounded-3xl border border-white/10 bg-black/20 p-4 backdrop-blur">
-                <div className="flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-white/60">
-                  <Link2 className="size-3.5" />
-                  Room Access
-                </div>
-                <div className="rounded-2xl border border-white/10 bg-black/20 p-3">
-                  <div className="text-xs text-white/55">Invite link</div>
-                  <div className="mt-2 break-all font-mono text-[11px] text-white/90">
-                    {inviteUrl || 'Create a room to generate a spectator link.'}
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="border-white/20 bg-white/10 text-white hover:bg-white/15"
-                    onClick={() => void handleCopyInvite()}
-                    disabled={!inviteUrl}
-                  >
-                    <Copy className="mr-2 size-4" />
-                    {inviteCopied ? 'Copied' : 'Copy Link'}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="border-white/20 bg-white/10 text-white hover:bg-white/15"
-                    onClick={() => setCoopChatOpen((prev) => !prev)}
-                    disabled={!sessionId}
-                  >
-                    <MessagesSquare className="mr-2 size-4" />
-                    {coopChatOpen ? 'Hide Chat' : 'Open Chat'}
-                  </Button>
-                </div>
-                <div className="rounded-2xl border border-white/10 bg-white/5 p-3 text-xs text-white/65">
-                  Spectators inherit the same room context on focus-map windows without taking vehicle control.
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <section className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
-            <div className="grid gap-4">
-              <div className="rounded-3xl border border-border/70 bg-card/80 p-4 shadow-sm">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <div className="text-sm font-semibold">Roster</div>
-                    <div className="text-xs text-muted-foreground">Who is driving, watching, and which vehicle they represent</div>
-                  </div>
-                  <Badge variant="outline" className="rounded-full px-3 py-1 text-[11px]">
-                    {coopParticipants.length} connected
-                  </Badge>
-                </div>
-                <div className="mt-4 grid gap-3 md:grid-cols-2">
-                  {coopParticipants.length === 0 ? (
-                    <div className="rounded-2xl border border-dashed border-border/70 bg-muted/20 p-4 text-sm text-muted-foreground">
-                      No one is in the room yet.
-                    </div>
-                  ) : (
-                    coopParticipants.map((participant) => (
-                      <div
-                        key={participant.userId}
-                        className={`rounded-2xl border p-4 ${
-                          participant.isHost
-                            ? 'border-sky-400/40 bg-sky-500/10'
-                            : participant.role === 'spectator'
-                              ? 'border-border/70 bg-muted/20'
-                              : 'border-emerald-500/25 bg-emerald-500/10'
-                        }`}
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <div className="text-sm font-semibold">{participant.username}</div>
-                            <div className="mt-1 text-xs text-muted-foreground">
-                              {participant.vehicleId || 'No vehicle bound'}
-                            </div>
-                          </div>
-                          <Badge
-                            variant="outline"
-                            className={`rounded-full px-2.5 py-1 text-[11px] ${
-                              participant.isHost
-                                ? 'border-sky-400/40 text-sky-700 dark:text-sky-300'
-                                : participant.role === 'spectator'
-                                  ? ''
-                                  : 'border-emerald-500/30 text-emerald-700 dark:text-emerald-300'
-                            }`}
-                          >
-                            {participant.isHost ? 'Host' : participant.role === 'spectator' ? 'Spectator' : 'Driver'}
-                          </Badge>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-
-              <div className="rounded-3xl border border-border/70 bg-card/80 p-4 shadow-sm">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <div className="text-sm font-semibold">Shared Route</div>
-                    <div className="text-xs text-muted-foreground">Publish the current route so the room can align on movement</div>
-                  </div>
-                  <Route className="size-4 text-muted-foreground" />
-                </div>
-                <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto]">
-                  <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
-                    <div className="text-sm font-medium">
-                      {sharedSessionRoute ? coopState.sharedRoute?.label || 'Coordinated route' : 'No shared route yet'}
-                    </div>
-                    <div className="mt-1 text-xs text-muted-foreground">
-                      {sharedSessionRoute
-                        ? `Broadcast by ${coopState.sharedRoute?.author}`
-                        : 'Use the mission route already loaded on this vehicle as the room route.'}
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap gap-2 sm:flex-col">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={handleShareCurrentRoute}
-                      disabled={!sessionId || !selectedMissionRoute}
-                    >
-                      Share Current Route
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={handleClearSharedRoute}
-                      disabled={!sessionId || !sharedSessionRoute}
-                    >
-                      Clear Route
-                    </Button>
-                  </div>
-                </div>
-                <div className="mt-3 rounded-2xl border border-dashed border-border/70 bg-background/40 p-3 text-xs text-muted-foreground">
-                  Race objectives and structured session goals can hang off this room model later without changing the chat or map surfaces again.
-                </div>
-              </div>
-            </div>
-
-            <div className="grid gap-4">
-              <div className="rounded-3xl border border-border/70 bg-card/80 p-4 shadow-sm">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <div className="text-sm font-semibold">Room Feed</div>
-                    <div className="text-xs text-muted-foreground">Persistent chat mirrored in the floating dock across controller and secondary displays</div>
-                  </div>
-                  <Button size="sm" variant="outline" onClick={() => setCoopChatOpen((prev) => !prev)} disabled={!sessionId}>
-                    {coopChatOpen ? 'Collapse' : 'Expand'}
-                  </Button>
-                </div>
-                {coopChatOpen ? (
-                  <div className="mt-4 grid gap-3">
-                    <div className="max-h-72 overflow-y-auto rounded-2xl border border-border/70 bg-background/60 p-3 text-sm">
-                      {coopMessages.length === 0 ? (
-                        <div className="text-muted-foreground">No messages yet.</div>
-                      ) : (
-                        coopMessages.map((msg) => (
-                          <div key={msg.id} className="mb-3 rounded-xl bg-muted/30 px-3 py-2">
-                            <div className="flex items-center justify-between gap-3">
-                              <span className="font-semibold">{msg.author}</span>
-                              <span className="text-[11px] text-muted-foreground">
-                                {new Date(msg.ts).toLocaleTimeString()}
-                              </span>
-                            </div>
-                            <div className="mt-1 text-sm">{msg.text}</div>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Input
-                        value={coopMessageInput}
-                        onChange={(event) => setCoopMessageInput(event.target.value)}
-                        placeholder="Send a room-wide note"
-                      />
-                      <Button size="sm" onClick={() => handleSendCoopMessage()} disabled={!sessionId}>
-                        Send
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="mt-4 rounded-2xl border border-border/70 bg-muted/20 p-4 text-sm text-muted-foreground">
-                    Keep the dock collapsed until you need the full feed.
-                  </div>
-                )}
-              </div>
-
-              <div className="rounded-3xl border border-border/70 bg-card/80 p-4 shadow-sm">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <div className="text-sm font-semibold">Ops Notes</div>
-                    <div className="text-xs text-muted-foreground">Current implementation boundaries</div>
-                  </div>
-                  <Mic className="size-4 text-muted-foreground" />
-                </div>
-                <div className="mt-4 grid gap-3 text-sm text-muted-foreground">
-                  <div className="rounded-2xl border border-border/70 bg-muted/20 p-3">
-                    Peer vehicles visible on map: <span className="font-medium text-foreground">{coopVehicles.length}</span>
-                  </div>
-                  <div className="rounded-2xl border border-border/70 bg-muted/20 p-3">
-                    Voice remains intentionally unwired. Reuse the existing SFU path when live audio is implemented.
-                  </div>
-                </div>
-              </div>
-            </div>
-          </section>
-        </div>
-      </OverlayModal>
-
-      <OverlayModal
         open={insightOverlay === 'diagnostics'}
         title="Live Diagnostics"
         onClose={() => setInsightOverlay(null)}
@@ -2194,6 +1596,14 @@ export function ControllerPage() {
               <span>Device</span>
             </div>
             <div className="grid gap-1">
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">GPS</span>
+                <span>{locationFeed.isConnected ? 'Linked' : 'Offline'}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Battery</span>
+                <span>{batteryLevel !== null ? `${batteryLevel}%` : 'n/a'}</span>
+              </div>
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">Firmware</span>
                 <span>{deviceStatus.fw || 'n/a'}</span>
@@ -2343,7 +1753,7 @@ export function ControllerPage() {
           </div>
         </div>
       </aside>
-      {(!modules.video || !modules.map || !modules.visualizer || !modules.stream) && (
+      {(!modules.video || !modules.visualizer || !modules.stream) && (
         <aside className="fixed bottom-6 left-1/2 z-40 -translate-x-1/2">
           <div className="rounded-full border border-slate-700/50 bg-slate-900/55 px-3 py-2 shadow-[0_16px_40px_rgba(2,6,23,0.5)] ring-1 ring-white/10 backdrop-blur-2xl dark:border-white/15 dark:bg-slate-900/45 dark:ring-white/10">
             <div className="flex items-center gap-2">
@@ -2357,18 +1767,6 @@ export function ControllerPage() {
                   className="rounded-full"
                 >
                   <VideoIcon className="size-4" />
-                </Button>
-              )}
-              {!modules.map && (
-                <Button
-                  size="icon"
-                  variant="outline"
-                  onClick={() => toggleModule('map')}
-                  aria-label="Show mini map"
-                  title="Show mini map"
-                  className="rounded-full"
-                >
-                  <MapIcon className="size-4" />
                 </Button>
               )}
               {!modules.visualizer && (
@@ -2388,8 +1786,8 @@ export function ControllerPage() {
                   size="icon"
                   variant="outline"
                   onClick={() => toggleModule('stream')}
-                  aria-label="Show data stream"
-                  title="Show data stream"
+                  aria-label="Show chat"
+                  title="Show chat"
                   className="rounded-full"
                 >
                   <Terminal className="size-4" />
@@ -2399,47 +1797,61 @@ export function ControllerPage() {
           </div>
         </aside>
       )}
-      <header className="relative z-[140] border-b border-border/80 bg-card/90 backdrop-blur">
-            <div className="container mx-auto flex items-center justify-between px-4 py-4">
-              <div className="flex items-center gap-3">
-                <div>
-                  <h1 className="text-2xl font-bold tracking-tight">IVY</h1>
-                  <p className="hidden text-sm text-muted-foreground md:block">
-                    {vehicle
-                      ? `User: ${user?.username || 'Unknown'} | ${vehicle.model} (${vehicle.id}) | Lease: ${
-                          controlLeaseId ? 'active' : 'missing'
-                        }`
-                      : `User: ${user?.username || 'Unknown'} | No vehicle selected`}
-                  </p>
-                </div>
+      <header className="sticky top-0 z-[140] border-b border-border/80 bg-card/92 backdrop-blur">
+        <div className="container mx-auto flex items-center justify-between gap-3 px-4 py-2.5">
+          <div className="min-w-0">
+            <h1 className="text-xl font-bold tracking-tight">IVY</h1>
+            <p className="truncate text-xs text-muted-foreground">
+              {vehicle
+                ? `${user?.username || 'Unknown'}, ${vehicle.model} (${vehicle.id}), lease ${controlLeaseId ? 'active' : 'missing'}`
+                : `${user?.username || 'Unknown'}, no vehicle, lease missing`}
+            </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 border-r border-border/70 pr-2">
+              <RealtimeIndicatorsRow
+                deviceOnline={deviceOnline}
+                gamepadConnected={Boolean(gamepadState.connected || hidDevice)}
+                driveMode={driveMode}
+                onDeviceClick={() => setDeviceOverlayOpen(true)}
+                onControllerClick={() => setControllerOverlayOpen(true)}
+                onAutoClick={handleAutoIndicatorClick}
+                compact
+              />
+            </div>
             <ControllerQuickMenu
               open={navOpen}
               onToggle={() => setNavOpen((prev) => !prev)}
               onSelect={handleOpenInsight}
             />
-            <Button onClick={toggleTheme} variant="outline" size="icon">
+            <Button onClick={toggleTheme} variant="outline" size="icon" title="Toggle theme" aria-label="Toggle theme">
               {theme === 'light' ? <Moon className="size-4" /> : <Sun className="size-4" />}
             </Button>
-            <Button onClick={() => void handleEndSession()} variant="outline">End Session</Button>
-            <Button onClick={handleLogout} variant="outline">
-              <LogOut className="mr-2 size-4" />
-              Logout
+            <Button
+              onClick={() => void handleEndSession()}
+              variant="outline"
+              size="icon"
+              title="End session"
+              aria-label="End session"
+            >
+              <Power className="size-4" />
+            </Button>
+            <Button onClick={handleLogout} variant="outline" size="icon" title="Logout" aria-label="Logout">
+              <LogOut className="size-4" />
             </Button>
           </div>
         </div>
       </header>
 
-        <main className="container mx-auto px-4 py-6">
-          <Tabs value={activeMainTab} onValueChange={(v) => setActiveMainTab(v as 'ops' | 'status' | 'stream')} className="space-y-6">
+        <main className="container mx-auto px-4 py-4">
+          <Tabs value={activeMainTab} onValueChange={(v) => setActiveMainTab(v as 'ops' | 'status' | 'stream')} className="space-y-4">
 
             {activeMainTab === 'ops' && (
             <TabsContent value="ops" className="space-y-4">
-              <Card className="border-border/70 bg-card/90">
+              <Card className="border-border/70 bg-card/90 lg:min-h-[calc(100vh-11rem)]">
                 <CardHeader className="p-0" />
-                <CardContent className="space-y-2 pt-0">
-                  <div className="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-3">
+                <CardContent className="space-y-2 pt-0 lg:flex lg:h-full lg:flex-col">
+                  <div className="grid grid-cols-1 items-stretch gap-4 lg:flex-1 lg:grid-cols-3">
                     {modules.video && (
                       <div className="relative lg:col-span-2">
                         <Button
@@ -2452,136 +1864,40 @@ export function ControllerPage() {
                         >
                           <Minimize2 className="size-4" />
                         </Button>
-                        <Suspense fallback={<OpsPanelFallback title="Video" />}>
+                        <Suspense fallback={<ControllerPanelFallback title="Video" />}>
                           <VideoPanel
                             signalingUrl={getDefaultSignalingUrl()}
                             roomId={roomId}
                             viewerId={viewerId}
                             className="flex h-full flex-col"
-                            videoClassName="h-full min-h-[30rem] flex-1"
+                            videoClassName="h-full min-h-[21rem] lg:min-h-[23rem] flex-1"
                           />
                         </Suspense>
                       </div>
                     )}
 
-                    <div className="space-y-3 lg:col-span-1">
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <button
-                          type="button"
-                          onClick={() => setDeviceOverlayOpen(true)}
-                          className="flex items-center gap-2 rounded-full border border-border/70 bg-card px-2.5 py-1 transition hover:border-border hover:bg-card/90"
-                          title="Device status"
-                        >
-                          <Car
-                            className={`size-4 ${
-                              deviceOnline
-                                ? 'text-emerald-500 drop-shadow-[0_0_6px_rgba(16,185,129,0.6)]'
-                                : 'text-slate-400'
-                            }`}
-                          />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setControllerOverlayOpen(true)}
-                          className="flex items-center gap-2 rounded-full border border-border/70 bg-card px-2.5 py-1 transition hover:border-border hover:bg-card/90"
-                          title="Controller status"
-                        >
-                          <Gamepad2
-                            className={`size-4 ${
-                              (gamepadState.connected || hidDevice)
-                                ? 'text-emerald-500 drop-shadow-[0_0_6px_rgba(16,185,129,0.6)]'
-                                : 'text-slate-400'
-                            }`}
-                          />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleAutoIndicatorClick}
-                          className="flex items-center gap-2 rounded-full border border-border/70 bg-card px-2.5 py-1 transition hover:border-border hover:bg-card/90"
-                          title={driveMode === 'auto' ? 'Auto mode active' : 'Manual mode'}
-                        >
-                          <Bot
-                            className={`size-4 ${
-                              driveMode === 'auto'
-                                ? 'text-emerald-400 drop-shadow-[0_0_8px_rgba(16,185,129,0.75)]'
-                                : 'text-slate-400'
-                            }`}
-                            aria-hidden="true"
-                          />
-                        </button>
-                      </div>
-                      {modules.map && (
-                        <Suspense fallback={<OpsPanelFallback title="Map" />}>
-                          <MapPanel
-                            location={locationFeed.latest}
-                            peerLocations={coopVehicles
-                              .filter((entry) => typeof entry.lat === 'number' && typeof entry.lng === 'number')
-                              .map((entry) => ({
-                                ts: entry.lastUpdatedAt || Date.now(),
-                                vehicleId: entry.vehicleId,
-                                lat: entry.lat || 0,
-                                lng: entry.lng || 0,
-                                heading: entry.heading,
-                                speedMps: entry.speedMps,
-                                username: entry.username,
-                              }))}
-                            isConnected={locationFeed.isConnected}
-                            error={locationFeed.error}
-                            route={selectedMissionRoute}
-                            sharedRoute={sharedSessionRoute}
-                            waypoints={displayWaypoints}
-                            showWaypoints
-                            followHeading
-                            followLocation={followVehicleMap}
-                            syncKey={`vehicle:${vehicleId}`}
-                            syncMode="read"
-                            autoFitRouteSignal={routeFocusSignal}
-                            mapOverlay={
-                              <>
-                                <div className="absolute right-3 top-3 pointer-events-auto">
-                                  <Button
-                                    size="icon"
-                                    variant="outline"
-                                    onClick={() => toggleModule('map')}
-                                    aria-label="Hide mini map"
-                                    title="Hide mini map"
-                                    className="rounded-full bg-card/80 backdrop-blur"
-                                  >
-                                    <Minimize2 className="size-4" />
-                                  </Button>
-                                </div>
-                                {!selectedMissionRoute &&
-                                  selectedMission?.waypoints &&
-                                  selectedMission.waypoints.length >= 2 && (
-                                    <div className="absolute right-12 top-3 rounded-full border border-border/70 bg-card/90 px-2 py-1 text-[10px] font-medium text-muted-foreground shadow-sm">
-                                      Route loading...
-                                    </div>
-                                  )}
-                                <div className="absolute left-4 bottom-4 pointer-events-auto">
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="bg-card/90 backdrop-blur"
-                                    onClick={() => setFollowVehicleMap(true)}
-                                    title="Follow vehicle"
-                                  >
-                                    <GoogleMapsLocationIcon className="size-4" />
-                                  </Button>
-                                </div>
-                              </>
-                            }
-                          />
-                        </Suspense>
+                    <div className="flex h-full min-h-[21rem] flex-col lg:col-span-1">
+                      {modules.stream && (
+                        <ControllerChatPanel
+                          sessionId={sessionId}
+                          inviteUrl={inviteUrl}
+                          inviteCopied={inviteCopied}
+                          isCoopHost={isCoopHost}
+                          participants={coopParticipants}
+                          messages={coopState.messages}
+                          terminalOutput={terminalOutput}
+                          sharedRoute={coopState.sharedRoute}
+                          selectedRouteReady={Boolean(sessionId && selectedMissionRoute)}
+                          className="flex h-full min-h-[21rem] flex-1 flex-col"
+                          onHide={() => toggleModule('stream')}
+                          onSendChat={handleSendCoopMessage}
+                          onStartSession={handleStartCoopSession}
+                          onCopyInvite={handleCopyInvite}
+                          onShareRoute={handleShareCurrentRoute}
+                          onClearRoute={handleClearSharedRoute}
+                        />
                       )}
-
-                    {modules.stream && (
-                      <DataStreamPanel
-                        terminalOutput={terminalOutput}
-                        terminalRef={terminalRef}
-                        onHide={() => toggleModule('stream')}
-                      />
-                    )}
-                  </div>
+                    </div>
                 </div>
 
                 {modules.visualizer && (
@@ -2634,194 +1950,59 @@ export function ControllerPage() {
                   </TabsContent>
 
                   <TabsContent value="controller" className="space-y-4">
-                    <div className="flex items-center gap-2">
-                      {gamepadState.connected ? (
-                        <>
-                          <Wifi className="size-5 text-green-500" />
-                          <span className="text-sm font-medium">Controller connected</span>
-                        </>
-                      ) : (
-                        <>
-                          <WifiOff className="size-5 text-red-500" />
-                          <span className="text-sm font-medium">Controller disconnected</span>
-                        </>
-                      )}
-                      <span title={driveMode === 'auto' ? 'Auto mode active' : 'Manual mode'}>
-                        <Bot
-                          className={`ml-2 size-5 ${
-                            driveMode === 'auto'
-                              ? 'text-emerald-400 drop-shadow-[0_0_8px_rgba(16,185,129,0.75)]'
-                              : 'text-slate-400'
-                          }`}
-                          aria-hidden="true"
-                        />
-                      </span>
-                    </div>
-                    <div className="rounded-lg border border-border p-3 text-sm">
-                      <div className="text-muted-foreground">Server input reception</div>
-                      <div className="font-medium">
-                        {serverTelemetryAck.lastAckTs
-                          ? `Receiving (${serverTelemetryAck.received} samples acknowledged)`
-                          : 'Waiting for input acknowledgment'}
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        Last ack:{' '}
-                        {serverTelemetryAck.lastAckTs
-                          ? new Date(serverTelemetryAck.lastAckTs).toLocaleTimeString()
-                          : '-'}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Badge variant="default" className={(inputPaused || estopLatched) ? 'bg-yellow-500' : 'bg-green-600'}>
-                        {(pauseLatched || estopLatched) ? 'Paused' : 'Active'}
-                      </Badge>
-                      <Badge variant="default" className={driveMode === 'auto' ? 'bg-blue-600' : 'bg-slate-500/60'}>
-                        {driveMode === 'auto' ? 'Auto Mode' : 'Manual Mode'}
-                      </Badge>
-                      <Badge variant="default" className={estopLatched ? 'bg-red-600' : 'bg-slate-500/60'}>
-                        {estopLatched ? 'E-Stop' : 'E-Stop Clear'}
-                      </Badge>
-                      <span className="text-sm text-muted-foreground">
-                        {estopLatched
-                          ? 'Emergency stop latched'
-                          : pauseLatched
-                            ? 'Input paused'
-                            : 'Ready to control vehicle'}
-                      </span>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <Button
-                        onClick={() => setPauseLatched((prev) => !prev)}
-                        variant={(pauseLatched || estopLatched) ? 'default' : 'outline'}
-                        disabled={estopLatched}
-                      >
-                        {(pauseLatched || estopLatched) ? 'Resume Input' : 'Pause Input'}
-                      </Button>
-                      <Button
-                        onClick={() => setEstopLatched(false)}
-                        variant="destructive"
-                        disabled={!estopLatched}
-                      >
-                        Clear E-Stop
-                      </Button>
-                      <Button onClick={triggerHaptics} variant="outline" disabled={hapticsSupported === false}>
-                        Test Haptics
-                      </Button>
-                    </div>
-                    <div className="space-y-3 rounded-lg border border-border p-3">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <div className="text-sm font-medium">Autonomy</div>
-                          <div className="text-xs text-muted-foreground">
-                            Mode: {driveMode.toUpperCase()}
-                            {activeMissionId
-                              ? ` â€¢ Active mission: ${formatMissionSummary(
-                                  (draftMission && activeMissionId === draftMission.id
-                                    ? draftMission
-                                    : missions.find((m) => m.id === activeMissionId)) || null,
-                                  mapRegionLabel
-                                )}`
-                              : ''}
-                          </div>
-                        </div>
-                        <div className="flex gap-2">
-                          <Button
-                            size="sm"
-                            variant={driveMode === 'auto' ? 'default' : 'outline'}
-                            onClick={() => (driveMode === 'auto' ? cancelMissionPrompt() : requestAutoMode())}
-                          >
-                            {driveMode === 'auto' ? 'Exit Auto' : 'Enable Auto'}
-                          </Button>
-                          <Button size="sm" variant="outline" onClick={refreshMissions}>
-                            Refresh
-                          </Button>
-                        </div>
-                      </div>
-                      <div className="grid gap-2">
-                        <label className="text-xs uppercase text-muted-foreground">Mission</label>
-                        <Select
-                          value={selectedMissionId}
-                          onValueChange={(value) => setSelectedMissionId(value)}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select mission" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {missions
-                              .filter((entry) => entry.vehicleId === vehicle?.id)
-                              .map((entry) => (
-                                <SelectItem key={entry.id} value={entry.id}>
-                                  {entry.name}
-                                </SelectItem>
-                              ))}
-                          </SelectContent>
-                        </Select>
-                        <div className="text-xs text-muted-foreground">
-                          {formatMissionSummary(resolveSelectedMission(), mapRegionLabel)}
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          <Button size="sm" variant="outline" onClick={stopVehicleNow}>
-                            Stop Vehicle
-                          </Button>
-                          <Button size="sm" variant="outline" onClick={sendRetraceMission}>
-                            Retrace Steps
-                          </Button>
-                          <Button size="sm" variant="outline" onClick={requestAutoMode}>
-                            Send New Mission
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="text-sm text-muted-foreground">Controller battery: {batteryLevel !== null ? `${batteryLevel}%` : 'Unavailable'}</div>
-                    <div className="space-y-2 rounded-lg border border-border p-3">
-                      <div className="text-sm font-medium">Controller Lightbar (WebHID)</div>
-                      {!hidSupported && <div className="text-xs text-muted-foreground">WebHID is not supported in this browser.</div>}
-                      {hidSupported && !hidSecure && <div className="text-xs text-muted-foreground">WebHID requires HTTPS or localhost.</div>}
-                      {canUseHid && (
-                        <>
-                          <div className="flex flex-wrap items-center gap-2">
-                            <Button onClick={hidDevice ? handleDisconnectHid : handleConnectHid} variant="outline">
-                              {hidDevice ? 'Disconnect' : 'Connect'}
-                            </Button>
-                            <input
-                              type="color"
-                              value={lightbarColor}
-                              onChange={(event) => setLightbarColor(event.target.value)}
-                              className="h-8 w-10 rounded border border-border bg-transparent p-0"
-                              aria-label="Lightbar color"
-                            />
-                            <Button
-                              onClick={() => hidDevice && sendLightbarColor(hidDevice, lightbarColor, hidProfile || 'unknown')}
-                              variant="outline"
-                              disabled={!hidDevice}
-                            >
-                              Apply
-                            </Button>
-                          </div>
-                          <div className="text-xs text-muted-foreground">USB connection required. Detected profile: {hidProfile || 'none'}</div>
-                        </>
-                      )}
-                    </div>
+                    <ControllerStatusPanel
+                      connected={gamepadState.connected}
+                      driveMode={driveMode}
+                      pauseLatched={pauseLatched}
+                      estopLatched={estopLatched}
+                      inputPaused={inputPaused}
+                      serverTelemetryAck={serverTelemetryAck}
+                      hapticsSupported={hapticsSupported}
+                      onTogglePause={() => setPauseLatched((prev) => !prev)}
+                      onClearEstop={() => setEstopLatched(false)}
+                      onTriggerHaptics={triggerHaptics}
+                    />
+                    <ControllerMissionPanel
+                      driveMode={driveMode}
+                      activeMissionId={activeMissionId}
+                      draftMission={draftMission}
+                      missions={missions}
+                      selectedMissionId={selectedMissionId}
+                      mapRegionLabel={mapRegionLabel}
+                      vehicleId={vehicle?.id}
+                      resolveSelectedMission={resolveSelectedMission}
+                      onSelectMission={(value) => setSelectedMissionId(value)}
+                      onRefreshMissions={() => void refreshMissions()}
+                      onRequestAutoMode={requestAutoMode}
+                      onCancelMissionPrompt={cancelMissionPrompt}
+                      onStopVehicle={stopVehicleNow}
+                      onRetraceMission={sendRetraceMission}
+                    />
+                    <ControllerDiagnosticsPanel
+                      batteryLabel={batteryLevel !== null ? `${batteryLevel}%` : 'Unavailable'}
+                      hidSupported={hidSupported}
+                      hidSecure={hidSecure}
+                      canUseHid={canUseHid}
+                      hidDeviceConnected={Boolean(hidDevice)}
+                      hidProfile={hidProfile}
+                      lightbarColor={lightbarColor}
+                      onSetLightbarColor={setLightbarColor}
+                      onConnectHid={handleConnectHid}
+                      onDisconnectHid={handleDisconnectHid}
+                      onApplyLightbar={() => {
+                        if (hidDevice) sendLightbarColor(hidDevice, lightbarColor, hidProfile || 'unknown');
+                      }}
+                    />
                   </TabsContent>
 
                   <TabsContent value="websocket" className="space-y-3">
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">WebSocket URL</label>
-                      <div className="flex flex-col gap-2 sm:flex-row">
-                        <Input
-                          value={wsUrlInput}
-                          onChange={(event) => setWsUrlInput(event.target.value)}
-                          placeholder="wss://random.trycloudflare.com"
-                          className="sm:flex-1"
-                          aria-label="WebSocket URL"
-                        />
-                        <div className="flex gap-2">
-                          <Button onClick={handleWsSave}>Apply</Button>
-                          <Button onClick={handleWsClear} variant="outline">Reset</Button>
-                        </div>
-                      </div>
-                      <div className="text-xs text-muted-foreground">Active URL: {wsUrl}</div>
-                    </div>
+                    <ControllerTransportSettings
+                      wsUrl={wsUrl}
+                      wsUrlInput={wsUrlInput}
+                      onChange={setWsUrlInput}
+                      onSave={handleWsSave}
+                      onReset={handleWsClear}
+                    />
                   </TabsContent>
                 </Tabs>
               </CardContent>
@@ -2831,35 +2012,25 @@ export function ControllerPage() {
 
           {activeMainTab === 'stream' && (
           <TabsContent value="stream">
-            <Card className="border-border/70 bg-card/90">
-              <CardHeader>
-                <CardTitle className="font-mono text-base">Data Stream</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div ref={terminalRef} className="h-[240px] overflow-y-auto rounded-lg bg-black p-3 font-mono text-xs text-green-400">
-                  {terminalOutput.length === 0 ? (
-                    <div className="text-muted-foreground">Waiting for events...</div>
-                  ) : (
-                    terminalOutput.map((line, index) => <div key={index} className="mb-1">{line}</div>)
-                  )}
-                </div>
-                <div className="mt-2 text-xs text-muted-foreground">
-                  Format: [x, o, box, triangle, l1, r1, l2(0-1), r2(0-1), share, play, l3, r3, up, down, left, right, ps, touch, leftX, leftY, rightX, rightY]
-                </div>
-              </CardContent>
-            </Card>
+            <ControllerChatPanel
+              sessionId={sessionId}
+              inviteUrl={inviteUrl}
+              inviteCopied={inviteCopied}
+              isCoopHost={isCoopHost}
+              participants={coopParticipants}
+              messages={coopState.messages}
+              terminalOutput={terminalOutput}
+              sharedRoute={coopState.sharedRoute}
+              selectedRouteReady={Boolean(sessionId && selectedMissionRoute)}
+              onSendChat={handleSendCoopMessage}
+              onStartSession={handleStartCoopSession}
+              onCopyInvite={handleCopyInvite}
+              onShareRoute={handleShareCurrentRoute}
+              onClearRoute={handleClearSharedRoute}
+            />
           </TabsContent>
           )}
         </Tabs>
-        {sessionId && (
-          <div className="pointer-events-none fixed bottom-4 right-4 z-40">
-            <CoopChatDock
-              coopState={coopState}
-              onSendChat={handleSendCoopMessage}
-              onClearRoute={isCoopHost ? handleClearSharedRoute : undefined}
-            />
-          </div>
-        )}
       </main>
     </div>
   );

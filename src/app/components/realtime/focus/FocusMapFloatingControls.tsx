@@ -1,4 +1,4 @@
-import { Flag, Layers, Search } from 'lucide-react';
+import { Flag, Layers, Route, Search } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 import { LocationIcon } from '@/app/components/realtime/LocationIcon';
 import { RealtimeIndicatorsRow } from '@/app/components/realtime/control/RealtimeIndicatorsRow';
@@ -14,6 +14,8 @@ type FocusMapFloatingControlsProps = {
   onThemes: () => void;
   onMissionPlanner: () => void;
   onSearch: () => void;
+  onShareRoute?: () => void;
+  canShareRoute?: boolean;
 };
 
 export function FocusMapFloatingControls(props: FocusMapFloatingControlsProps) {
@@ -28,6 +30,8 @@ export function FocusMapFloatingControls(props: FocusMapFloatingControlsProps) {
     onThemes,
     onMissionPlanner,
     onSearch,
+    onShareRoute,
+    canShareRoute = false,
   } = props;
 
   return (
@@ -52,6 +56,18 @@ export function FocusMapFloatingControls(props: FocusMapFloatingControlsProps) {
         <Button size="sm" variant="outline" className="bg-card/90 backdrop-blur" onClick={onMissionPlanner} title="Mission planner">
           <Flag className="size-4" />
         </Button>
+        {onShareRoute && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="bg-card/90 backdrop-blur"
+            onClick={onShareRoute}
+            title="Share route"
+            disabled={!canShareRoute}
+          >
+            <Route className="size-4" />
+          </Button>
+        )}
         <Button size="sm" variant="outline" className="bg-card/90 backdrop-blur" onClick={onSearch} title="Search location">
           <Search className="size-4" />
         </Button>

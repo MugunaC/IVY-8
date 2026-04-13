@@ -7,8 +7,9 @@ import { getVehicleColor } from './vehicleColors';
 type CoopLegendProps = {
   participants: CoopParticipant[];
   vehicles: CoopSessionVehicle[];
-  open: boolean;
-  onToggle: () => void;
+  open?: boolean;
+  onToggle?: () => void;
+  hideHeader?: boolean;
   className?: string;
 };
 
@@ -26,7 +27,7 @@ function sortParticipants(participants: CoopParticipant[]) {
 }
 
 export function CoopLegend(props: CoopLegendProps) {
-  const { participants, vehicles, open, onToggle, className } = props;
+  const { participants, vehicles, open = true, onToggle, hideHeader = false, className } = props;
   const vehiclesById = new Map(vehicles.map((vehicle) => [vehicle.vehicleId, vehicle]));
   const ordered = sortParticipants(participants);
 
@@ -37,24 +38,26 @@ export function CoopLegend(props: CoopLegendProps) {
         className
       )}
     >
-      <button
-        type="button"
-        onClick={onToggle}
-        className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left"
-      >
-        <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.18em] text-slate-300">
-          <UserRound className="size-3.5" />
-          Legend
-          <Badge variant="outline" className="border-white/10 bg-white/5 text-[10px] text-slate-200">
-            {participants.length}
-          </Badge>
-        </div>
-        <span className="flex h-7 w-7 items-center justify-center rounded-md text-slate-200">
-          {open ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
-        </span>
-      </button>
+      {!hideHeader && (
+        <button
+          type="button"
+          onClick={onToggle}
+          className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left"
+        >
+          <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.18em] text-slate-300">
+            <UserRound className="size-3.5" />
+            Legend
+            <Badge variant="outline" className="border-white/10 bg-white/5 text-[10px] text-slate-200">
+              {participants.length}
+            </Badge>
+          </div>
+          <span className="flex h-7 w-7 items-center justify-center rounded-md text-slate-200">
+            {open ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+          </span>
+        </button>
+      )}
       {open && (
-        <div className="grid max-h-64 gap-2 overflow-y-auto border-t border-white/10 px-3 py-3">
+        <div className={cn('grid max-h-64 gap-2 overflow-y-auto px-3 py-3', !hideHeader && 'border-t border-white/10')}>
           {ordered.map((participant) => {
             const vehicle = participant.vehicleId ? vehiclesById.get(participant.vehicleId) : undefined;
             const color = getVehicleColor(participant.vehicleId);

@@ -48,7 +48,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 import { OverlayModal } from '@/app/components/ui/overlay-modal';
-import { CoopChatDock } from '@/app/components/realtime/CoopChatDock';
+import { CoopLegendOverlay } from '@/app/components/realtime/coop/CoopLegendOverlay';
 import { RealtimeIndicatorsRow } from '@/app/components/realtime/control/RealtimeIndicatorsRow';
 import { FocusMapFloatingControls } from '@/app/components/realtime/focus/FocusMapFloatingControls';
 import { FocusMapMissionOverlay } from '@/app/components/realtime/focus/FocusMapMissionOverlay';
@@ -86,6 +86,12 @@ const VideoPanel = lazy(async () => {
 });
 
 const VISUALIZER_MIN_HEIGHT = 380;
+const OVERLAY_OPACITY_PRESETS = [0.6, 0.8, 1] as const;
+
+function nextOverlayOpacity(current: number) {
+  const index = OVERLAY_OPACITY_PRESETS.indexOf(current as (typeof OVERLAY_OPACITY_PRESETS)[number]);
+  return OVERLAY_OPACITY_PRESETS[(index + 1) % OVERLAY_OPACITY_PRESETS.length] ?? 0.85;
+}
 function OpsPanelFallback(props: { title: string }) {
   return (
     <section className="rounded-xl border border-border bg-card p-4">
@@ -140,6 +146,9 @@ export function FocusMapView() {
   const [tbtDismissed, setTbtDismissed] = useState(false);
   const [tbtMinimized, setTbtMinimized] = useState(false);
   const [tbtOpacity, setTbtOpacity] = useState(0.85);
+  const [legendDismissed, setLegendDismissed] = useState(false);
+  const [legendMinimized, setLegendMinimized] = useState(false);
+  const [legendOpacity, setLegendOpacity] = useState(0.85);
   const [tbtRouteMenuOpen, setTbtRouteMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchStatus, setSearchStatus] = useState<string | null>(null);
@@ -209,7 +218,7 @@ export function FocusMapView() {
       coopHandlerRef.current(message);
     },
   });
-  const { coopState, handleServerMessage, sendChat, clearSharedPlan } = useCoopSession({
+  const { coopState, handleServerMessage, setSharedPlan } = useCoopSession({
     wsRef,
     isConnected: isControlWsConnected,
     sessionId,
@@ -409,6 +418,18 @@ export function FocusMapView() {
     triggerRouteFocus();
   }, [lastSearchCoords, planningEnabled, setPlanningEnabled, triggerRouteFocus]);
 
+  const isCoopHost = Boolean(user?.id && coopState.hostUserId === user.id);
+
+  const handleShareRoute = useCallback(() => {
+    if (!sessionId || !isCoopHost || !missionRoute || !user?.id || !user.username) return;
+    setSharedPlan({
+      waypoints: missionWaypoints,
+      route: missionRoute,
+      distanceMeters: missionDistance,
+      etaSeconds: missionEta,
+    });
+  }, [isCoopHost, missionDistance, missionEta, missionRoute, missionWaypoints, sessionId, setSharedPlan, user?.id, user?.username]);
+
   useEffect(() => {
     if (showMissionPlanner && !plannerMounted) {
       setPlannerMounted(true);
@@ -422,12 +443,22 @@ export function FocusMapView() {
     setTbtRouteMenuOpen(false);
   }, [missionRoute?.coordinates?.length, routeSteps.length, selectedRouteIndex]);
 
+  useEffect(() => {
+    if (!sessionId) {
+      setLegendDismissed(false);
+      setLegendMinimized(false);
+      return;
+    }
+    setLegendDismissed(false);
+  }, [sessionId]);
+
   const handleToggleOpacity = useCallback(() => {
-    const presets = [0.6, 0.8, 1];
-    const index = presets.indexOf(tbtOpacity);
-    const next = presets[(index + 1) % presets.length] ?? 0.85;
-    setTbtOpacity(next);
-  }, [tbtOpacity]);
+    setTbtOpacity((current) => nextOverlayOpacity(current));
+  }, []);
+
+  const handleToggleLegendOpacity = useCallback(() => {
+    setLegendOpacity((current) => nextOverlayOpacity(current));
+  }, []);
 
   useEffect(() => {
     if (!isFocusedDisplay) {
@@ -1413,7 +1444,20 @@ export function FocusMapView() {
                     onFollow={() => setFollowVehicleMap(true)}
                     onThemes={() => setMapThemesOpen(true)}
                     onMissionPlanner={() => setMissionOverlayOpen(true)}
+                    onShareRoute={sessionId ? handleShareRoute : undefined}
+                    canShareRoute={Boolean(sessionId && isCoopHost && missionRoute?.coordinates?.length)}
                     onSearch={() => setSearchOpen(true)}
+                  />
+                )}
+                {isFocusMap && sessionId && !legendDismissed && (
+                  <CoopLegendOverlay
+                    participants={coopState.participants}
+                    vehicles={coopState.vehicles}
+                    minimized={legendMinimized}
+                    opacity={legendOpacity}
+                    onToggleOpacity={handleToggleLegendOpacity}
+                    onToggleMinimized={() => setLegendMinimized((prev) => !prev)}
+                    onClose={() => setLegendDismissed(true)}
                   />
                 )}
                 {isFocusMap && !tbtDismissed && routeSteps.length > 0 && currentStep && (
@@ -1724,15 +1768,6 @@ export function FocusMapView() {
               </div>
             )}
       </OverlayModal>
-      {sessionId && (
-        <div className="pointer-events-none fixed bottom-4 right-4 z-40">
-          <CoopChatDock
-            coopState={coopState}
-            onSendChat={sendChat}
-            onClearRoute={clearSharedPlan}
-          />
-        </div>
-      )}
       <OverlayModal
         open={mapThemesOpen}
         title="Map Themes"

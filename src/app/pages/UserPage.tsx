@@ -137,7 +137,7 @@ export function UserPage() {
             <p className="text-sm text-[color:var(--app-header-muted)]">Welcome, {user?.username}</p>
           </div>
           <div className="flex gap-2">
-            <Button onClick={() => navigate('/coop')} variant="outline" className="app-header-action">
+            <Button onClick={() => navigate('/control')} variant="outline" className="app-header-action">
               <Users className="mr-2 size-4" />
               Coop
             </Button>
@@ -295,7 +295,13 @@ export function UserPage() {
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  <Button variant="outline" onClick={() => navigate(`/coop?vehicleId=${encodeURIComponent(selectedVehicle)}`)}>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      const vehicle = vehicles.find((v) => v.id === selectedVehicle);
+                      navigate('/control', { state: { vehicle } });
+                    }}
+                  >
                     Coop
                   </Button>
                   <Button variant="outline" onClick={() => void handleUnselectVehicle()}>

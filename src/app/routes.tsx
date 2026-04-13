@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react';
-import { createBrowserRouter, Navigate, useLocation } from 'react-router';
+import { createBrowserRouter, Navigate, useLocation, useParams } from 'react-router';
 import { useAuth } from '@/app/context/AuthContext';
 
 const LoginPage = lazy(async () => {
@@ -18,17 +18,24 @@ const ControllerPage = lazy(async () => {
   const mod = await import('@/app/pages/ControllerPage');
   return { default: mod.ControllerPage };
 });
-const CoopPage = lazy(async () => {
-  const mod = await import('@/app/pages/CoopPage');
-  return { default: mod.CoopPage };
-});
-const CoopSessionPage = lazy(async () => {
-  const mod = await import('@/app/pages/CoopSessionPage');
-  return { default: mod.CoopSessionPage };
-});
 function OpsRedirect() {
   const location = useLocation();
   return <Navigate to={`/control${location.search}${location.hash}`} replace />;
+}
+
+function CoopRedirect() {
+  const location = useLocation();
+  return <Navigate to={`/control${location.search}${location.hash}`} replace />;
+}
+
+function CoopSessionRedirect() {
+  const location = useLocation();
+  const params = useParams();
+  const search = new URLSearchParams(location.search);
+  if (params.sessionId) {
+    search.set('session', params.sessionId);
+  }
+  return <Navigate to={`/control?${search.toString()}${location.hash}`} replace />;
 }
 
 function RouteFallback() {
@@ -105,9 +112,7 @@ export const router = createBrowserRouter([
     path: '/coop',
     element: (
       <RequireAuth>
-        <Suspense fallback={<RouteFallback />}>
-          <CoopPage />
-        </Suspense>
+        <CoopRedirect />
       </RequireAuth>
     ),
   },
@@ -115,9 +120,7 @@ export const router = createBrowserRouter([
     path: '/coop/session/:sessionId',
     element: (
       <RequireAuth>
-        <Suspense fallback={<RouteFallback />}>
-          <CoopSessionPage />
-        </Suspense>
+        <CoopSessionRedirect />
       </RequireAuth>
     ),
   },

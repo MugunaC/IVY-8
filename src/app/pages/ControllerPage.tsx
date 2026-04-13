@@ -577,13 +577,6 @@ export function ControllerPage() {
   }, [refreshMissions]);
 
   const selectedMission = useMemo(() => resolveSelectedMission(), [resolveSelectedMission]);
-  const selectedMissionRoute = useMemo(() => {
-    if (!selectedMission) return null;
-    if (selectedMission.route && selectedMission.route.coordinates.length >= 2) {
-      return selectedMission.route;
-    }
-    return null;
-  }, [selectedMission]);
   const shouldShowMissionOverlay =
     missionPrompt !== 'none' && Boolean(vehicle) && !location.pathname.startsWith('/admin');
 
@@ -1241,24 +1234,48 @@ export function ControllerPage() {
       typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
         ? crypto.randomUUID().slice(0, 12)
         : `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
-    navigate(`/coop/session/${encodeURIComponent(nextSessionId)}?vehicleId=${encodeURIComponent(vehicleId)}`, {
-      replace: false,
-    });
+    const params = new URLSearchParams(location.search);
+    params.set('session', nextSessionId);
+    params.delete('spectator');
+    navigate(
+      {
+        pathname: location.pathname,
+        search: params.toString() ? `?${params.toString()}` : '',
+      },
+      { replace: false, state: location.state }
+    );
   };
 
-  const handleShareCurrentRoute = () => {
-    if (!sessionId || !selectedMissionRoute || !user?.id || !user.username) return;
-    sendClientMessage({
-      type: 'coop_plan_set',
-      sessionId,
-      vehicleId,
-      userId: user.id,
-      username: user.username,
-      waypoints: selectedMission?.waypoints || [],
-      route: selectedMissionRoute,
-      distanceMeters: selectedMission?.distanceMeters,
-      etaSeconds: selectedMission?.etaSeconds,
-    });
+  const handleJoinCoopSession = (nextSessionId: string, asSpectator: boolean) => {
+    const trimmedSessionId = nextSessionId.trim();
+    if (!trimmedSessionId) return;
+    const params = new URLSearchParams(location.search);
+    params.set('session', trimmedSessionId);
+    if (asSpectator) {
+      params.set('spectator', '1');
+    } else {
+      params.delete('spectator');
+    }
+    navigate(
+      {
+        pathname: location.pathname,
+        search: params.toString() ? `?${params.toString()}` : '',
+      },
+      { replace: false, state: location.state }
+    );
+  };
+
+  const handleLeaveCoopSession = () => {
+    const params = new URLSearchParams(location.search);
+    params.delete('session');
+    params.delete('spectator');
+    navigate(
+      {
+        pathname: location.pathname,
+        search: params.toString() ? `?${params.toString()}` : '',
+      },
+      { replace: false, state: location.state }
+    );
   };
 
   const handleClearSharedRoute = () => {
@@ -1887,14 +1904,15 @@ export function ControllerPage() {
                           messages={coopState.messages}
                           terminalOutput={terminalOutput}
                           sharedPlan={coopState.sharedPlan}
-                          selectedRouteReady={Boolean(sessionId && selectedMissionRoute)}
                           currentUserId={user?.id}
+                          coopVehicleId={vehicleId}
                           className="flex h-full min-h-[21rem] flex-1 flex-col"
                           onHide={() => toggleModule('stream')}
                           onSendChat={handleSendCoopMessage}
-                          onStartSession={handleStartCoopSession}
+                          onHostSession={handleStartCoopSession}
+                          onJoinSession={handleJoinCoopSession}
+                          onLeaveSession={handleLeaveCoopSession}
                           onCopyInvite={handleCopyInvite}
-                          onShareRoute={handleShareCurrentRoute}
                           onClearRoute={handleClearSharedRoute}
                         />
                       )}
@@ -2024,12 +2042,13 @@ export function ControllerPage() {
               messages={coopState.messages}
               terminalOutput={terminalOutput}
               sharedPlan={coopState.sharedPlan}
-              selectedRouteReady={Boolean(sessionId && selectedMissionRoute)}
               currentUserId={user?.id}
+              coopVehicleId={vehicleId}
               onSendChat={handleSendCoopMessage}
-              onStartSession={handleStartCoopSession}
+              onHostSession={handleStartCoopSession}
+              onJoinSession={handleJoinCoopSession}
+              onLeaveSession={handleLeaveCoopSession}
               onCopyInvite={handleCopyInvite}
-              onShareRoute={handleShareCurrentRoute}
               onClearRoute={handleClearSharedRoute}
             />
           </TabsContent>

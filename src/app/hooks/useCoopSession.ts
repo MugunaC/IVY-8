@@ -17,7 +17,7 @@ const EMPTY_STATE: CoopStatePayload = {
   participants: [],
   vehicles: [],
   messages: [],
-  sharedRoute: null,
+  sharedPlan: null,
 };
 
 export function useCoopSession(options: UseCoopSessionOptions) {
@@ -32,7 +32,7 @@ export function useCoopSession(options: UseCoopSessionOptions) {
     setState((prev) =>
       prev.sessionId === sessionId
         ? prev
-        : { sessionId, invitePath: '', participants: [], vehicles: [], messages: [], sharedRoute: null }
+        : { sessionId, invitePath: '', participants: [], vehicles: [], messages: [], sharedPlan: null }
     );
   }, [sessionId]);
 
@@ -87,43 +87,48 @@ export function useCoopSession(options: UseCoopSessionOptions) {
     });
   }, [send, sessionId, userId, username, vehicleId]);
 
-  const shareRoute = useCallback(
+  const setSharedPlan = useCallback(
     (
-      route: { type: 'LineString'; coordinates: [number, number][] },
-      meta?: { label?: string; distanceMeters?: number; etaSeconds?: number }
+      plan: {
+        waypoints: Array<{ lat: number; lng: number; label?: string }>;
+        route?: { type: 'LineString'; coordinates: [number, number][] } | null;
+        distanceMeters?: number;
+        etaSeconds?: number;
+      }
     ) => {
       if (!sessionId || !userId || !username) return false;
       return send({
-        type: 'coop_share_route',
+        type: 'coop_plan_set',
         sessionId,
         vehicleId,
         userId,
         username,
-        route,
-        label: meta?.label,
-        distanceMeters: meta?.distanceMeters,
-        etaSeconds: meta?.etaSeconds,
+        waypoints: plan.waypoints,
+        route: plan.route,
+        distanceMeters: plan.distanceMeters,
+        etaSeconds: plan.etaSeconds,
       });
     },
     [send, sessionId, userId, username, vehicleId]
   );
 
-  const clearRoute = useCallback(() => {
-    if (!sessionId) return false;
+  const clearSharedPlan = useCallback(() => {
+    if (!sessionId || !userId) return false;
     return send({
-      type: 'coop_clear_route',
+      type: 'coop_plan_clear',
       sessionId,
+      userId,
     });
-  }, [send, sessionId]);
+  }, [send, sessionId, userId]);
 
   return useMemo(
     () => ({
       coopState: state,
       handleServerMessage,
       sendChat,
-      shareRoute,
-      clearRoute,
+      setSharedPlan,
+      clearSharedPlan,
     }),
-    [clearRoute, handleServerMessage, sendChat, shareRoute, state]
+    [clearSharedPlan, handleServerMessage, sendChat, setSharedPlan, state]
   );
 }

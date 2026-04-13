@@ -40,9 +40,9 @@ export function ControllerVisualizerPanel(props: ControllerVisualizerPanelProps)
               onClick={onHide}
               aria-label="Hide controller visualizer"
               title="Hide controller visualizer"
-              className="rounded-full"
+              className="h-7 w-7 rounded-full"
             >
-              <Minimize2 className="size-4" />
+              <Minimize2 className="size-3.5" />
             </Button>
           )}
         </div>

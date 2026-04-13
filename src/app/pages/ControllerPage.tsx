@@ -170,7 +170,7 @@ export function ControllerPage() {
     participants: [],
     vehicles: [],
     messages: [],
-    sharedRoute: null,
+    sharedPlan: null,
   });
   const [sessionStats, setSessionStats] = useState({
     totalDistanceM: 0,
@@ -375,7 +375,7 @@ export function ControllerPage() {
       participants: [],
       vehicles: [],
       messages: [],
-      sharedRoute: null,
+      sharedPlan: null,
     });
   }, [sessionId]);
 
@@ -1241,21 +1241,20 @@ export function ControllerPage() {
       typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
         ? crypto.randomUUID().slice(0, 12)
         : `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
-    const params = new URLSearchParams(location.search);
-    params.set('session', nextSessionId);
-    params.delete('spectator');
-    navigate({ pathname: location.pathname, search: `?${params.toString()}` }, { replace: false });
+    navigate(`/coop/session/${encodeURIComponent(nextSessionId)}?vehicleId=${encodeURIComponent(vehicleId)}`, {
+      replace: false,
+    });
   };
 
   const handleShareCurrentRoute = () => {
     if (!sessionId || !selectedMissionRoute || !user?.id || !user.username) return;
     sendClientMessage({
-      type: 'coop_share_route',
+      type: 'coop_plan_set',
       sessionId,
       vehicleId,
       userId: user.id,
       username: user.username,
-      label: selectedMission?.name || `Route from ${vehicleId}`,
+      waypoints: selectedMission?.waypoints || [],
       route: selectedMissionRoute,
       distanceMeters: selectedMission?.distanceMeters,
       etaSeconds: selectedMission?.etaSeconds,
@@ -1263,10 +1262,11 @@ export function ControllerPage() {
   };
 
   const handleClearSharedRoute = () => {
-    if (!sessionId) return;
+    if (!sessionId || !user?.id) return;
     sendClientMessage({
-      type: 'coop_clear_route',
+      type: 'coop_plan_clear',
       sessionId,
+      userId: user.id,
     });
   };
 
@@ -1860,9 +1860,9 @@ export function ControllerPage() {
                           onClick={() => toggleModule('video')}
                           aria-label="Hide video panel"
                           title="Hide video panel"
-                          className="absolute right-3 top-3 z-10 rounded-full bg-card/80 backdrop-blur"
+                          className="absolute right-3 top-3 z-10 h-7 w-7 rounded-full bg-card/80 backdrop-blur"
                         >
-                          <Minimize2 className="size-4" />
+                          <Minimize2 className="size-3.5" />
                         </Button>
                         <Suspense fallback={<ControllerPanelFallback title="Video" />}>
                           <VideoPanel
@@ -1886,8 +1886,9 @@ export function ControllerPage() {
                           participants={coopParticipants}
                           messages={coopState.messages}
                           terminalOutput={terminalOutput}
-                          sharedRoute={coopState.sharedRoute}
+                          sharedPlan={coopState.sharedPlan}
                           selectedRouteReady={Boolean(sessionId && selectedMissionRoute)}
+                          currentUserId={user?.id}
                           className="flex h-full min-h-[21rem] flex-1 flex-col"
                           onHide={() => toggleModule('stream')}
                           onSendChat={handleSendCoopMessage}
@@ -1901,16 +1902,18 @@ export function ControllerPage() {
                 </div>
 
                 {modules.visualizer && (
-                  <ControllerVisualizerPanel
-                    inputPaused={inputPaused}
-                    onToggleInputPaused={() => setInputPaused((prev) => !prev)}
-                    onHide={() => toggleModule('visualizer')}
-                    visualizerRef={visualizerRef}
-                    visualizerContainerRef={visualizerContainerRef}
-                    visualizerHeight={visualizerHeight}
-                    visualizerMaxHeight={visualizerMaxHeight}
-                    onLoad={sendVisualizerMaxHeight}
-                  />
+                  <div>
+                    <ControllerVisualizerPanel
+                      inputPaused={inputPaused}
+                      onToggleInputPaused={() => setInputPaused((prev) => !prev)}
+                      onHide={() => toggleModule('visualizer')}
+                      visualizerRef={visualizerRef}
+                      visualizerContainerRef={visualizerContainerRef}
+                      visualizerHeight={visualizerHeight}
+                      visualizerMaxHeight={visualizerMaxHeight}
+                      onLoad={sendVisualizerMaxHeight}
+                    />
+                  </div>
                 )}
               </CardContent>
             </Card>
@@ -2020,8 +2023,9 @@ export function ControllerPage() {
               participants={coopParticipants}
               messages={coopState.messages}
               terminalOutput={terminalOutput}
-              sharedRoute={coopState.sharedRoute}
+              sharedPlan={coopState.sharedPlan}
               selectedRouteReady={Boolean(sessionId && selectedMissionRoute)}
+              currentUserId={user?.id}
               onSendChat={handleSendCoopMessage}
               onStartSession={handleStartCoopSession}
               onCopyInvite={handleCopyInvite}

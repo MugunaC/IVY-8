@@ -280,17 +280,17 @@ type ParsedIncomingMessage =
   | { kind: 'coop_leave'; sessionId: string; userId: string }
   | { kind: 'coop_chat'; sessionId: string; vehicleId?: string; userId: string; username: string; text: string }
   | {
-      kind: 'coop_share_route';
+      kind: 'coop_plan_set';
       sessionId: string;
       vehicleId?: string;
       userId: string;
       username: string;
-      label?: string;
-      route: { type: 'LineString'; coordinates: [number, number][] };
+      waypoints: Array<{ lat: number; lng: number; label?: string }>;
+      route?: { type: 'LineString'; coordinates: [number, number][] } | null;
       distanceMeters?: number;
       etaSeconds?: number;
     }
-  | { kind: 'coop_clear_route'; sessionId: string }
+  | { kind: 'coop_plan_clear'; sessionId: string; userId: string }
   | { kind: 'device_hello'; payload: DeviceHelloPayload; protocolVersion?: number }
   | { kind: 'control'; vehicleId: string; payload: ControlPayload }
   | { kind: 'mission'; vehicleId: string; payload: MissionPayload }
@@ -456,24 +456,25 @@ function parseIncoming(message: RawData, fallbackVehicleId?: string): ParsedInco
     };
   }
 
-  if (result.data.type === 'coop_share_route') {
+  if (result.data.type === 'coop_plan_set') {
     return {
-      kind: 'coop_share_route',
+      kind: 'coop_plan_set',
       sessionId: result.data.sessionId,
       vehicleId: result.data.vehicleId,
       userId: result.data.userId,
       username: result.data.username,
-      label: result.data.label,
+      waypoints: result.data.waypoints,
       route: result.data.route,
       distanceMeters: result.data.distanceMeters,
       etaSeconds: result.data.etaSeconds,
     };
   }
 
-  if (result.data.type === 'coop_clear_route') {
+  if (result.data.type === 'coop_plan_clear') {
     return {
-      kind: 'coop_clear_route',
+      kind: 'coop_plan_clear',
       sessionId: result.data.sessionId,
+      userId: result.data.userId,
     };
   }
 
@@ -676,11 +677,9 @@ const inputAckBySocket = new Map<WebSocket, { received: number; lastAckTs: numbe
 
 function buildInvitePath(sessionId: string, vehicleId?: string) {
   const params = new URLSearchParams();
-  params.set('session', sessionId);
-  params.set('spectator', '1');
-  params.set('focus', 'map');
+  params.set('role', 'spectator');
   if (vehicleId) params.set('vehicleId', vehicleId);
-  return `/control?${params.toString()}`;
+  return `/coop/session/${encodeURIComponent(sessionId)}?${params.toString()}`;
 }
 
 const coopSessions = new InMemoryCoopSessionService<WebSocket>({
@@ -1313,25 +1312,26 @@ if (START_WS && wssControl) {
         return;
       }
 
-      if (parsed.kind === 'coop_share_route') {
+      if (parsed.kind === 'coop_plan_set') {
         const actor = coopSessions.getMeta(ws);
         broadcastCoopState(
-          coopSessions.shareRoute({
+          coopSessions.setPlan({
             sessionId: parsed.sessionId,
             userId: actor?.userId || parsed.userId,
             username: actor?.username || parsed.username,
             vehicleId: actor?.vehicleId || parsed.vehicleId,
+            waypoints: parsed.waypoints,
             route: parsed.route,
-            label: parsed.label,
             distanceMeters: parsed.distanceMeters,
             etaSeconds: parsed.etaSeconds,
-          })
+          }, actor?.userId || parsed.userId)
         );
         return;
       }
 
-      if (parsed.kind === 'coop_clear_route') {
-        broadcastCoopState(coopSessions.clearRoute(parsed.sessionId));
+      if (parsed.kind === 'coop_plan_clear') {
+        const actor = coopSessions.getMeta(ws);
+        broadcastCoopState(coopSessions.clearPlan(parsed.sessionId, actor?.userId || parsed.userId));
         return;
       }
 

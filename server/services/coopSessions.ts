@@ -3,8 +3,9 @@ import type {
   CoopParticipant,
   CoopRole,
   CoopSessionVehicle,
-  CoopSharedRoute,
+  CoopSharedPlan,
   CoopStatePayload,
+  MissionWaypoint,
 } from '../../shared/types.js';
 
 interface CoopSessionState<TConnection> {
@@ -13,7 +14,8 @@ interface CoopSessionState<TConnection> {
   participants: Map<string, CoopParticipant>;
   sockets: Set<TConnection>;
   messages: CoopChatMessage[];
-  sharedRoute: CoopSharedRoute | null;
+  sharedPlan: CoopSharedPlan | null;
+  version: number;
 }
 
 interface CoopConnectionMeta {
@@ -45,8 +47,8 @@ interface ShareRouteParams {
   vehicleId?: string;
   userId: string;
   username: string;
-  label?: string;
-  route: { type: 'LineString'; coordinates: [number, number][] };
+  waypoints: MissionWaypoint[];
+  route?: { type: 'LineString'; coordinates: [number, number][] } | null;
   distanceMeters?: number;
   etaSeconds?: number;
 }
@@ -95,6 +97,9 @@ export class InMemoryCoopSessionService<TConnection> {
       joinedAt: session.participants.get(params.userId)?.joinedAt || now,
       lastSeenAt: now,
       isHost: false,
+      isOnline: true,
+      isActive: true,
+      isSpeaking: false,
     });
     this.metaByConnection.set(connection, {
       sessionId: params.sessionId,
@@ -149,6 +154,9 @@ export class InMemoryCoopSessionService<TConnection> {
       username: params.username,
       vehicleId: params.vehicleId || existing?.vehicleId,
       lastSeenAt: now,
+      isOnline: true,
+      isActive: true,
+      isSpeaking: true,
     });
     return {
       message,
@@ -156,25 +164,42 @@ export class InMemoryCoopSessionService<TConnection> {
     };
   }
 
-  shareRoute(params: ShareRouteParams) {
+  setPlan(params: ShareRouteParams, actorUserId: string) {
     const session = this.getOrCreateSession(params.sessionId);
-    session.sharedRoute = {
+    if (session.hostUserId && session.hostUserId !== actorUserId) {
+      return this.buildBroadcast(params.sessionId);
+    }
+    session.version += 1;
+    session.sharedPlan = {
       sessionId: params.sessionId,
       vehicleId: params.vehicleId,
-      authorId: params.userId,
-      author: params.username,
-      label: params.label,
+      updatedByUserId: params.userId,
+      updatedByUsername: params.username,
+      waypoints: params.waypoints,
       route: params.route,
       distanceMeters: params.distanceMeters,
       etaSeconds: params.etaSeconds,
-      sharedAt: this.options.now(),
+      version: session.version,
+      updatedAt: this.options.now(),
     };
+    const participant = session.participants.get(params.userId);
+    if (participant) {
+      session.participants.set(params.userId, {
+        ...participant,
+        lastSeenAt: this.options.now(),
+        isActive: true,
+      });
+    }
     return this.buildBroadcast(params.sessionId);
   }
 
-  clearRoute(sessionId: string) {
+  clearPlan(sessionId: string, actorUserId: string) {
     const session = this.getOrCreateSession(sessionId);
-    session.sharedRoute = null;
+    if (session.hostUserId && session.hostUserId !== actorUserId) {
+      return this.buildBroadcast(sessionId);
+    }
+    session.version += 1;
+    session.sharedPlan = null;
     return this.buildBroadcast(sessionId);
   }
 
@@ -196,7 +221,8 @@ export class InMemoryCoopSessionService<TConnection> {
       participants: new Map(),
       sockets: new Set(),
       messages: [],
-      sharedRoute: null,
+      sharedPlan: null,
+      version: 0,
     };
     this.sessionById.set(sessionId, created);
     return created;
@@ -217,6 +243,11 @@ export class InMemoryCoopSessionService<TConnection> {
         ...participant,
         role: isHost ? 'host' : participant.role === 'host' ? 'driver' : participant.role,
         isHost,
+        isOnline: [...session.sockets].some((socket) => this.metaByConnection.get(socket)?.userId === userId),
+        isActive: this.options.now() - participant.lastSeenAt < 15_000,
+        isSpeaking: this.options.now() - participant.lastSeenAt < 8_000 && participant.role !== 'spectator'
+          ? participant.isSpeaking
+          : false,
       });
     });
   }
@@ -259,7 +290,7 @@ export class InMemoryCoopSessionService<TConnection> {
         participants: [...session.participants.values()].sort((a, b) => a.joinedAt - b.joinedAt),
         vehicles: this.buildVehicles(sessionId),
         messages: session.messages.slice(-50),
-        sharedRoute: session.sharedRoute || null,
+        sharedPlan: session.sharedPlan || null,
       },
     };
   }

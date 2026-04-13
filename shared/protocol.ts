@@ -46,6 +46,9 @@ export const coopParticipantSchema = z.object({
   joinedAt: z.number().nonnegative(),
   lastSeenAt: z.number().nonnegative(),
   isHost: z.boolean(),
+  isOnline: z.boolean().optional(),
+  isActive: z.boolean().optional(),
+  isSpeaking: z.boolean().optional(),
 });
 
 export const coopChatMessageSchema = z.object({
@@ -69,19 +72,28 @@ export const coopSessionVehicleSchema = z.object({
   lastUpdatedAt: z.number().nonnegative().optional(),
 });
 
-export const coopSharedRouteSchema = z.object({
+const missionWaypointSchema = z.object({
+  lat: z.number(),
+  lng: z.number(),
+  label: z.string().min(1).optional(),
+});
+
+export const coopSharedPlanSchema = z.object({
   sessionId: z.string().min(1),
   vehicleId: z.string().min(1).optional(),
-  authorId: z.string().min(1),
-  author: z.string().min(1),
-  label: z.string().min(1).optional(),
-  route: z.object({
-    type: z.literal('LineString'),
-    coordinates: z.array(z.tuple([z.number(), z.number()])).min(2),
-  }),
+  updatedByUserId: z.string().min(1),
+  updatedByUsername: z.string().min(1),
+  waypoints: z.array(missionWaypointSchema),
+  route: z
+    .object({
+      type: z.literal('LineString'),
+      coordinates: z.array(z.tuple([z.number(), z.number()])).min(2),
+    })
+    .nullish(),
   distanceMeters: z.number().nonnegative().optional(),
   etaSeconds: z.number().nonnegative().optional(),
-  sharedAt: z.number().nonnegative(),
+  version: z.number().int().nonnegative(),
+  updatedAt: z.number().nonnegative(),
 });
 
 export const coopStatePayloadSchema = z.object({
@@ -92,7 +104,7 @@ export const coopStatePayloadSchema = z.object({
   participants: z.array(coopParticipantSchema),
   vehicles: z.array(coopSessionVehicleSchema),
   messages: z.array(coopChatMessageSchema),
-  sharedRoute: coopSharedRouteSchema.nullish(),
+  sharedPlan: coopSharedPlanSchema.nullish(),
 });
 
 export const cameraStatusPayloadSchema = z.object({
@@ -188,22 +200,25 @@ export const clientMessageSchema = z.union([
     text: z.string().min(1).max(500),
   }),
   z.object({
-    type: z.literal('coop_share_route'),
+    type: z.literal('coop_plan_set'),
     sessionId: z.string().min(1),
     vehicleId: z.string().min(1).optional(),
     userId: z.string().min(1),
     username: z.string().min(1),
-    label: z.string().min(1).optional(),
-    route: z.object({
-      type: z.literal('LineString'),
-      coordinates: z.array(z.tuple([z.number(), z.number()])).min(2),
-    }),
+    waypoints: z.array(missionWaypointSchema),
+    route: z
+      .object({
+        type: z.literal('LineString'),
+        coordinates: z.array(z.tuple([z.number(), z.number()])).min(2),
+      })
+      .nullish(),
     distanceMeters: z.number().nonnegative().optional(),
     etaSeconds: z.number().nonnegative().optional(),
   }),
   z.object({
-    type: z.literal('coop_clear_route'),
+    type: z.literal('coop_plan_clear'),
     sessionId: z.string().min(1),
+    userId: z.string().min(1),
   }),
   z.object({
     type: z.literal('device_hello'),

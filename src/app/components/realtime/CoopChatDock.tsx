@@ -57,12 +57,12 @@ export function CoopChatDock(props: CoopChatDockProps) {
           </span>
           <span>{lastMessage ? `${lastMessage.author} active` : 'Quiet channel'}</span>
         </div>
-        {showRouteBadge && coopState.sharedRoute && (
+        {showRouteBadge && coopState.sharedPlan && (
           <div className="flex items-center justify-between gap-2 rounded-2xl border border-amber-400/25 bg-amber-400/10 px-3 py-2 text-[11px]">
             <div className="flex items-center gap-2 truncate">
               <Route className="size-3" />
               <span className="truncate">
-                {coopState.sharedRoute.label || 'Shared coordinated route'} by {coopState.sharedRoute.author}
+                Shared plan by {coopState.sharedPlan.updatedByUsername}
               </span>
             </div>
             {onClearRoute && (

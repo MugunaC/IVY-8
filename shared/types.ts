@@ -177,6 +177,14 @@ export interface SensorStatePayload {
 
 export type CoopRole = 'host' | 'driver' | 'spectator';
 
+export type MissionPathType = 'straight' | 'roads';
+
+export interface MissionWaypoint {
+  lat: number;
+  lng: number;
+  label?: string;
+}
+
 export interface CoopParticipant {
   userId: string;
   username: string;
@@ -185,6 +193,9 @@ export interface CoopParticipant {
   joinedAt: number;
   lastSeenAt: number;
   isHost: boolean;
+  isOnline?: boolean;
+  isActive?: boolean;
+  isSpeaking?: boolean;
 }
 
 export interface CoopChatMessage {
@@ -208,19 +219,20 @@ export interface CoopSessionVehicle {
   lastUpdatedAt?: number;
 }
 
-export interface CoopSharedRoute {
+export interface CoopSharedPlan {
   sessionId: string;
   vehicleId?: string;
-  authorId: string;
-  author: string;
-  label?: string;
-  route: {
+  updatedByUserId: string;
+  updatedByUsername: string;
+  waypoints: MissionWaypoint[];
+  route?: {
     type: 'LineString';
     coordinates: [number, number][];
-  };
+  } | null;
   distanceMeters?: number;
   etaSeconds?: number;
-  sharedAt: number;
+  version: number;
+  updatedAt: number;
 }
 
 export interface CoopStatePayload {
@@ -231,7 +243,7 @@ export interface CoopStatePayload {
   participants: CoopParticipant[];
   vehicles: CoopSessionVehicle[];
   messages: CoopChatMessage[];
-  sharedRoute?: CoopSharedRoute | null;
+  sharedPlan?: CoopSharedPlan | null;
 }
 
 export interface TelemetryEntry {
@@ -242,14 +254,6 @@ export interface TelemetryEntry {
   vehicleId?: string;
   payload: TelemetryPayload;
   bytes: number;
-}
-
-export type MissionPathType = 'straight' | 'roads';
-
-export interface MissionWaypoint {
-  lat: number;
-  lng: number;
-  label?: string;
 }
 
 export interface MissionPlan {
@@ -309,17 +313,17 @@ export type WsClientMessage =
   | { type: 'coop_leave'; sessionId: string; userId: string }
   | { type: 'coop_chat'; sessionId: string; vehicleId?: string; userId: string; username: string; text: string }
   | {
-      type: 'coop_share_route';
+      type: 'coop_plan_set';
       sessionId: string;
       vehicleId?: string;
       userId: string;
       username: string;
-      label?: string;
-      route: { type: 'LineString'; coordinates: [number, number][] };
+      waypoints: MissionWaypoint[];
+      route?: { type: 'LineString'; coordinates: [number, number][] } | null;
       distanceMeters?: number;
       etaSeconds?: number;
     }
-  | { type: 'coop_clear_route'; sessionId: string }
+  | { type: 'coop_plan_clear'; sessionId: string; userId: string }
   | { type: 'device_hello'; payload: DeviceHelloPayload; protocolVersion?: number }
   | { type: 'control'; vehicleId: string; payload: ControlPayload }
   | { type: 'mission'; vehicleId: string; payload: MissionPayload }

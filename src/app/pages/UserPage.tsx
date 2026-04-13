@@ -14,7 +14,7 @@ import {
   setLastVehicleSelection,
 } from '@/app/data/settingsRepo';
 import type { Vehicle } from '@shared/types';
-import { LogOut, Car, MapPin, Battery, CheckCircle2, Moon, Sun } from 'lucide-react';
+import { LogOut, Car, MapPin, Battery, CheckCircle2, Moon, Sun, Users } from 'lucide-react';
 
 export function UserPage() {
   const { user, logout } = useAuth();
@@ -137,6 +137,10 @@ export function UserPage() {
             <p className="text-sm text-[color:var(--app-header-muted)]">Welcome, {user?.username}</p>
           </div>
           <div className="flex gap-2">
+            <Button onClick={() => navigate('/coop')} variant="outline" className="app-header-action">
+              <Users className="mr-2 size-4" />
+              Coop
+            </Button>
             <Button onClick={toggleTheme} variant="outline" size="icon" className="app-header-action">
               {theme === 'light' ? <Moon className="size-4" /> : <Sun className="size-4" />}
             </Button>
@@ -291,6 +295,9 @@ export function UserPage() {
                   </div>
                 </div>
                 <div className="flex gap-2">
+                  <Button variant="outline" onClick={() => navigate(`/coop?vehicleId=${encodeURIComponent(selectedVehicle)}`)}>
+                    Coop
+                  </Button>
                   <Button variant="outline" onClick={() => void handleUnselectVehicle()}>
                     End Session
                   </Button>

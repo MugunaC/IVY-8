@@ -2,11 +2,21 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import maplibregl from 'maplibre-gl/dist/maplibre-gl-csp';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import type { VehicleLocation } from '@/app/hooks/useVehicleLocationFeed';
-import type { MissionWaypoint } from '@shared/types';
+import type { CoopRole, MissionWaypoint } from '@shared/types';
+import { getVehicleColor } from '@/app/components/realtime/coop/vehicleColors';
+
+type PeerLocation = VehicleLocation & {
+  username?: string;
+  vehicleId: string;
+  role?: CoopRole;
+  isOnline?: boolean;
+  isActive?: boolean;
+  isSpeaking?: boolean;
+};
 
 interface MapPanelProps {
   location: VehicleLocation | null;
-  peerLocations?: Array<VehicleLocation & { username?: string }>;
+  peerLocations?: PeerLocation[];
   isConnected: boolean;
   error?: string | null;
   className?: string;
@@ -16,7 +26,7 @@ interface MapPanelProps {
   mapOverlay?: React.ReactNode;
   waypoints?: MissionWaypoint[];
   route?: { type: 'LineString'; coordinates: [number, number][] } | null;
-  sharedRoute?: { type: 'LineString'; coordinates: [number, number][] } | null;
+  sharedPlan?: { route?: { type: 'LineString'; coordinates: [number, number][] } | null } | null;
   alternativeRoutes?: Array<{ type: 'LineString'; coordinates: [number, number][] }>;
   selectedAlternativeIndex?: number | null;
   highlightedAlternativeIndex?: number | null;
@@ -126,6 +136,15 @@ export function MapPanel(props: MapPanelProps) {
   useEffect(() => {
     latestRef.current = location;
   }, [location]);
+
+  useEffect(() => {
+    const markerNode = markerNodeRef.current;
+    if (!markerNode) return;
+    const color = getVehicleColor(location?.vehicleId);
+    markerNode.style.backgroundColor = color.fill;
+    markerNode.style.borderColor = color.border;
+    markerNode.style.boxShadow = `0 10px 22px ${color.glow}`;
+  }, [location?.vehicleId]);
 
   useEffect(() => {
     onMapClickRef.current = props.onMapClick || null;
@@ -276,7 +295,7 @@ export function MapPanel(props: MapPanelProps) {
       }
     };
 
-    if (!nextRoute && !props.sharedRoute && (!alternativeRoutes || alternativeRoutes.length === 0)) {
+    if (!nextRoute && !props.sharedPlan?.route && (!alternativeRoutes || alternativeRoutes.length === 0)) {
       return;
     }
     if (alternativeRoutes && alternativeRoutes.length > 0) {
@@ -288,10 +307,10 @@ export function MapPanel(props: MapPanelProps) {
     if (nextRoute) {
       renderRoute(nextRoute, 0, 'primary');
     }
-    if (props.sharedRoute) {
-      renderRoute(props.sharedRoute, 0, 'shared');
+    if (props.sharedPlan?.route) {
+      renderRoute(props.sharedPlan.route, 0, 'shared');
     }
-  }, [props.sharedRoute]);
+  }, [props.sharedPlan]);
 
   const applySyncedView = useCallback((raw: string) => {
     const map = mapRef.current;
@@ -563,7 +582,7 @@ export function MapPanel(props: MapPanelProps) {
 
   useEffect(() => {
     applyRoutes(props.route || null, props.alternativeRoutes || [], props.selectedAlternativeIndex ?? null);
-  }, [applyRoutes, props.route, props.sharedRoute, props.alternativeRoutes, props.selectedAlternativeIndex]);
+  }, [applyRoutes, props.route, props.sharedPlan, props.alternativeRoutes, props.selectedAlternativeIndex]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -573,10 +592,20 @@ export function MapPanel(props: MapPanelProps) {
     peerMarkersRef.current = (props.peerLocations || [])
       .filter((entry) => Number.isFinite(entry.lat) && Number.isFinite(entry.lng))
       .map((entry) => {
+        const color = getVehicleColor(entry.vehicleId);
         const markerNode = document.createElement('div');
         markerNode.className =
-          'flex min-w-[2rem] items-center justify-center rounded-full border border-white/80 bg-amber-500 px-2 py-1 text-[10px] font-semibold text-slate-950 shadow';
+          'flex min-w-[2.4rem] items-center justify-center rounded-full border px-2 py-1 text-[10px] font-semibold shadow';
+        markerNode.style.backgroundColor = entry.isOnline === false ? color.mutedFill : color.fill;
+        markerNode.style.borderColor = color.border;
+        markerNode.style.color = color.text;
+        markerNode.style.boxShadow = `0 8px 18px ${entry.isOnline === false ? 'rgba(15,23,42,0.2)' : color.glow}`;
         markerNode.textContent = entry.username || entry.vehicleId;
+        if (entry.isSpeaking) {
+          markerNode.style.outline = '2px solid rgba(255,255,255,0.8)';
+        } else if (entry.isActive) {
+          markerNode.style.outline = '2px solid rgba(255,255,255,0.35)';
+        }
         return new maplibregl.Marker({ element: markerNode })
           .setLngLat([entry.lng, entry.lat])
           .addTo(map);

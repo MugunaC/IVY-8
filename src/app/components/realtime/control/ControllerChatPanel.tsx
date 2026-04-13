@@ -1,19 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { CoopChatMessage, CoopParticipant, CoopSharedRoute } from '@shared/types';
-import { Badge } from '@/app/components/ui/badge';
+import type { CoopChatMessage, CoopParticipant, CoopSharedPlan } from '@shared/types';
 import { Button } from '@/app/components/ui/button';
-import { Card, CardContent, CardTitle } from '@/app/components/ui/card';
-import { Checkbox } from '@/app/components/ui/checkbox';
+import { Card, CardContent } from '@/app/components/ui/card';
 import { Input } from '@/app/components/ui/input';
+import { OverlayModal } from '@/app/components/ui/overlay-modal';
 import { cn } from '@/app/components/ui/utils';
 import {
-  ChevronDown,
-  ChevronUp,
   Copy,
+  List,
   MessageSquare,
+  Minimize2,
+  Play,
   Route,
   Send,
-  Terminal,
+  Trash2,
   Users,
 } from 'lucide-react';
 
@@ -25,8 +25,9 @@ type ControllerChatPanelProps = {
   participants: CoopParticipant[];
   messages: CoopChatMessage[];
   terminalOutput: string[];
-  sharedRoute?: CoopSharedRoute | null;
+  sharedPlan?: CoopSharedPlan | null;
   selectedRouteReady: boolean;
+  currentUserId?: string;
   className?: string;
   onHide?: () => void;
   onSendChat: (text: string) => void;
@@ -36,44 +37,30 @@ type ControllerChatPanelProps = {
   onClearRoute: () => void;
 };
 
-type FeedEntry =
-  | {
-      id: string;
-      kind: 'system';
-      author: string;
-      body: string;
-      ts: number;
-    }
-  | {
-      id: string;
-      kind: 'user';
-      author: string;
-      body: string;
-      ts: number;
-    };
+type FeedEntry = {
+  id: string;
+  kind: 'system' | 'self' | 'peer';
+  author: string;
+  body: string;
+  ts: number;
+};
 
 function parseTimestamp(line: string, index: number) {
   const match = /^\[(.+?)\]\s*/.exec(line);
   const body = match ? line.slice(match[0].length) : line;
   if (!match) {
-    return {
-      ts: index,
-      body,
-    };
+    return { ts: Date.now() + index, body };
   }
   const parsed = Date.parse(match[1]);
-  return {
-    ts: Number.isFinite(parsed) ? parsed : index,
-    body,
-  };
+  return { ts: Number.isFinite(parsed) ? parsed : Date.now() + index, body };
 }
 
 function formatFeedTime(ts: number) {
-  if (!Number.isFinite(ts) || ts <= 0) return '--';
+  if (!Number.isFinite(ts) || ts <= 0) return '--:--';
   try {
-    return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   } catch {
-    return '--';
+    return '--:--';
   }
 }
 
@@ -86,8 +73,9 @@ export function ControllerChatPanel(props: ControllerChatPanelProps) {
     participants,
     messages,
     terminalOutput,
-    sharedRoute,
+    sharedPlan,
     selectedRouteReady,
+    currentUserId,
     className,
     onHide,
     onSendChat,
@@ -97,9 +85,7 @@ export function ControllerChatPanel(props: ControllerChatPanelProps) {
     onClearRoute,
   } = props;
   const [draft, setDraft] = useState('');
-  const [showSystem, setShowSystem] = useState(true);
-  const [showUsers, setShowUsers] = useState(true);
-  const [actionsOpen, setActionsOpen] = useState(true);
+  const [roomOpen, setRoomOpen] = useState(false);
   const [rosterOpen, setRosterOpen] = useState(false);
   const feedRef = useRef<HTMLDivElement | null>(null);
 
@@ -109,23 +95,20 @@ export function ControllerChatPanel(props: ControllerChatPanelProps) {
       return {
         id: `system-${index}-${parsed.ts}`,
         kind: 'system' as const,
-        author: 'System',
+        author: 'system',
         body: parsed.body,
         ts: parsed.ts,
       };
     });
     const userEntries = messages.map((message) => ({
       id: message.id,
-      kind: 'user' as const,
-      author: message.author || 'User',
+      kind: message.authorId === currentUserId ? ('self' as const) : ('peer' as const),
+      author: message.author || 'participant',
       body: message.text,
       ts: message.ts,
     }));
-    return [...systemEntries, ...userEntries]
-      .filter((entry) => (entry.kind === 'system' ? showSystem : showUsers))
-      .sort((a, b) => a.ts - b.ts)
-      .slice(-120);
-  }, [messages, showSystem, showUsers, terminalOutput]);
+    return [...systemEntries, ...userEntries].sort((a, b) => a.ts - b.ts).slice(-120);
+  }, [currentUserId, messages, terminalOutput]);
 
   useEffect(() => {
     const node = feedRef.current;
@@ -140,144 +123,156 @@ export function ControllerChatPanel(props: ControllerChatPanelProps) {
     setDraft('');
   };
 
-  const drivers = participants.filter((entry) => entry.role !== 'spectator').length;
-  const spectators = participants.filter((entry) => entry.role === 'spectator').length;
+  const participantCount = participants.length;
+  const onlineCount = participants.filter((entry) => entry.isOnline !== false).length;
 
   return (
-    <Card className={cn('border-border/70 bg-card/92', className)}>
-      <CardContent className="flex h-full min-h-0 flex-col gap-3 p-3">
-        <div className="flex items-center justify-between gap-2 border-b border-border/60 pb-2">
-          <div className="flex min-w-0 items-center gap-2">
-            <MessageSquare className="size-4 text-muted-foreground" />
-            <CardTitle className="text-sm font-semibold">Chat</CardTitle>
-            <Badge variant="outline" className="rounded-full px-2 py-0.5 text-[10px]">
-              {sessionId ? `R:${sessionId.slice(0, 6)}` : 'No room'}
-            </Badge>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <label className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
-              <Checkbox checked={showSystem} onCheckedChange={(value) => setShowSystem(value === true)} />
-              <Terminal className="size-3" />
-              Sys
-            </label>
-            <label className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
-              <Checkbox checked={showUsers} onCheckedChange={(value) => setShowUsers(value === true)} />
-              <Users className="size-3" />
-              Users
-            </label>
-            {onHide && (
-              <Button size="icon" variant="outline" onClick={onHide} aria-label="Hide chat" title="Hide chat" className="h-8 w-8 rounded-full">
-                <ChevronDown className="size-4" />
-              </Button>
-            )}
-          </div>
-        </div>
-
-        <div className="grid gap-2">
-          <section className="rounded-xl border border-border/70 bg-muted/20">
-            <button type="button" className="flex w-full items-center justify-between px-3 py-2 text-left" onClick={() => setActionsOpen((prev) => !prev)}>
-              <div className="flex items-center gap-2 text-xs">
-                <span className="font-medium text-foreground">Room</span>
-                <span className="text-muted-foreground">{drivers} drv · {spectators} spec</span>
-                {sharedRoute ? <span className="text-muted-foreground">route:{sharedRoute.author}</span> : null}
-              </div>
-              {actionsOpen ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
-            </button>
-            {actionsOpen && (
-              <div className="grid gap-2 border-t border-border/60 px-3 py-2">
-                {!sessionId ? (
-                  <Button size="sm" onClick={onStartSession}>Start Room</Button>
-                ) : (
-                  <>
-                    <div className="truncate text-[11px] text-muted-foreground">{inviteUrl || 'Invite unavailable'}</div>
-                    <div className="flex flex-wrap gap-2">
-                      <Button size="sm" variant="outline" onClick={() => void onCopyInvite()} disabled={!inviteUrl}>
-                        <Copy className="mr-2 size-3.5" />
-                        {inviteCopied ? 'Copied' : 'Copy'}
-                      </Button>
-                      <Button size="sm" variant="outline" onClick={onShareRoute} disabled={!selectedRouteReady}>
-                        <Route className="mr-2 size-3.5" />
-                        Share
-                      </Button>
-                      <Button size="sm" variant="ghost" onClick={onClearRoute} disabled={!sharedRoute || !isCoopHost}>
-                        Clear
-                      </Button>
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
-          </section>
-
-          <section className="rounded-xl border border-border/70 bg-muted/20">
-            <button type="button" className="flex w-full items-center justify-between px-3 py-2 text-left" onClick={() => setRosterOpen((prev) => !prev)}>
-              <div className="text-xs">
-                <span className="font-medium text-foreground">Roster</span>
-                <span className="ml-2 text-muted-foreground">{participants.length} in room</span>
-              </div>
-              {rosterOpen ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
-            </button>
-            {rosterOpen && (
-              <div className="grid gap-1.5 border-t border-border/60 px-3 py-2">
-                {participants.length === 0 ? (
-                  <div className="text-xs text-muted-foreground">Nobody has joined the room yet.</div>
-                ) : (
-                  participants.map((participant) => (
-                    <div key={participant.userId} className="flex items-center justify-between gap-2 rounded-lg bg-background/70 px-2 py-1.5 text-xs">
-                      <span className="truncate font-medium">{participant.username}</span>
-                      <span className="text-muted-foreground">{participant.isHost ? 'Host' : participant.role === 'spectator' ? 'Spec' : 'Drv'}</span>
-                    </div>
-                  ))
-                )}
-              </div>
-            )}
-          </section>
-        </div>
-
-        <div ref={feedRef} className="min-h-[18rem] flex-1 overflow-y-auto rounded-xl border border-border/70 bg-slate-950/95 px-2 py-2 shadow-inner">
-          {feedEntries.length === 0 ? (
-            <div className="px-1 text-xs text-slate-400">No visible messages.</div>
-          ) : (
-            <div className="space-y-1.5">
-              {feedEntries.map((entry) => (
-                <article
-                  key={entry.id}
-                  className={cn(
-                    'rounded-lg border-l-2 px-2 py-1.5 text-xs',
-                    entry.kind === 'system'
-                      ? 'border-l-sky-400 bg-sky-500/5 text-slate-100'
-                      : 'border-l-emerald-400 bg-emerald-500/5 text-slate-100'
-                  )}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="min-w-0 truncate">
-                      <span className={cn('font-semibold', entry.kind === 'system' ? 'text-sky-200' : 'text-emerald-200')}>{entry.author}</span>
-                    </div>
-                    <span className="shrink-0 text-[10px] text-white/45">{formatFeedTime(entry.ts)}</span>
-                  </div>
-                  <div className="mt-0.5 break-words leading-5 text-white/88">{entry.body}</div>
-                </article>
-              ))}
+    <>
+      <Card className={cn('border-border/70 bg-card/92', className)}>
+        <CardContent className="flex h-full min-h-0 flex-col gap-3 p-3">
+          <div className="flex items-center justify-between gap-2 rounded-lg border border-border/60 bg-muted/20 px-2 py-1.5">
+            <div className="flex min-w-0 items-center gap-1">
+              <MessageSquare className="size-3.5 text-muted-foreground" />
+              <span className="truncate text-xs font-medium">{sessionId ? `room ${sessionId.slice(0, 6)}` : 'chat'}</span>
+              <span className="text-[10px] text-muted-foreground">
+                {onlineCount}/{participantCount}
+              </span>
             </div>
+            <div className="flex items-center gap-1">
+              {!sessionId ? (
+                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={onStartSession} title="Start coop session">
+                  <Play className="size-3.5" />
+                </Button>
+              ) : (
+                <>
+                  <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setRoomOpen(true)} title="Room controls">
+                    <List className="size-3.5" />
+                  </Button>
+                  <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setRosterOpen(true)} title="Participants">
+                    <Users className="size-3.5" />
+                  </Button>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-7 w-7"
+                    onClick={onShareRoute}
+                    disabled={!selectedRouteReady}
+                    title="Share current plan"
+                  >
+                    <Route className="size-3.5" />
+                  </Button>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-7 w-7"
+                    onClick={onClearRoute}
+                    disabled={!sharedPlan || !isCoopHost}
+                    title="Clear shared plan"
+                  >
+                    <Trash2 className="size-3.5" />
+                  </Button>
+                </>
+              )}
+              {onHide && (
+                <Button size="icon" variant="ghost" onClick={onHide} aria-label="Hide chat" title="Hide chat" className="h-7 w-7">
+                  <Minimize2 className="size-3.5" />
+                </Button>
+              )}
+            </div>
+          </div>
+
+          <div
+            ref={feedRef}
+            className="min-h-[16rem] flex-1 overflow-y-auto rounded-lg border border-slate-800 bg-black px-3 py-3 font-mono text-xs shadow-inner"
+          >
+            {feedEntries.length === 0 ? (
+              <div className="text-slate-500">[awaiting traffic]</div>
+            ) : (
+              <div className="space-y-1.5">
+                {feedEntries.map((entry) => (
+                  <article
+                    key={entry.id}
+                    className={cn(
+                      'grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 rounded px-2 py-1',
+                      entry.kind === 'system'
+                        ? 'bg-emerald-500/6 text-emerald-300'
+                        : entry.kind === 'self'
+                          ? 'bg-white/5 text-slate-100'
+                          : 'bg-amber-500/6 text-amber-300'
+                    )}
+                  >
+                    <span className="text-[10px] text-white/40">{formatFeedTime(entry.ts)}</span>
+                    <div className="min-w-0">
+                      <span className="mr-1 uppercase tracking-[0.16em] text-[10px] text-white/35">{entry.author}</span>
+                      <span className="break-words">{entry.body}</span>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Input
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') submit();
+              }}
+              placeholder={sessionId ? 'Type message' : 'Start session to chat'}
+              disabled={!sessionId}
+              className="h-9 border-slate-800 bg-slate-950 text-slate-100 placeholder:text-slate-500"
+            />
+            <Button size="icon" onClick={submit} disabled={!sessionId || !draft.trim()} title="Send message" className="h-9 w-9">
+              <Send className="size-4" />
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <OverlayModal open={roomOpen} title="Room Controls" onClose={() => setRoomOpen(false)} maxWidthClassName="max-w-md">
+        <div className="grid gap-3 text-sm">
+          <div className="truncate rounded-lg border border-border/60 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+            {inviteUrl || 'Invite unavailable'}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="outline" onClick={() => void onCopyInvite()} disabled={!inviteUrl}>
+              <Copy className="mr-2 size-3.5" />
+              {inviteCopied ? 'Copied' : 'Copy Invite'}
+            </Button>
+            <Button size="sm" variant="outline" onClick={onShareRoute} disabled={!selectedRouteReady}>
+              <Route className="mr-2 size-3.5" />
+              Share Plan
+            </Button>
+            <Button size="sm" variant="ghost" onClick={onClearRoute} disabled={!sharedPlan || !isCoopHost}>
+              <Trash2 className="mr-2 size-3.5" />
+              Clear Plan
+            </Button>
+          </div>
+        </div>
+      </OverlayModal>
+
+      <OverlayModal open={rosterOpen} title="Participants" onClose={() => setRosterOpen(false)} maxWidthClassName="max-w-md">
+        <div className="grid gap-2">
+          {participants.length === 0 ? (
+            <div className="text-sm text-muted-foreground">No participants connected.</div>
+          ) : (
+            participants.map((participant) => (
+              <div key={participant.userId} className="flex items-center justify-between gap-2 rounded-lg border border-border/60 bg-muted/20 px-3 py-2 text-sm">
+                <div className="min-w-0">
+                  <div className="truncate font-medium">{participant.username}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {participant.role} · {participant.vehicleId || 'no vehicle'}
+                  </div>
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {participant.isOnline === false ? 'offline' : participant.isSpeaking ? 'speaking' : participant.isActive ? 'active' : 'idle'}
+                </div>
+              </div>
+            ))
           )}
         </div>
-
-        <div className="flex items-center gap-2">
-          <Input
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') submit();
-            }}
-            placeholder={sessionId ? 'Message room' : 'Start room to chat'}
-            disabled={!sessionId}
-            className="h-9"
-          />
-          <Button size="icon" onClick={submit} disabled={!sessionId || !draft.trim()} title="Send message" className="h-9 w-9">
-            <Send className="size-4" />
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
+      </OverlayModal>
+    </>
   );
 }

@@ -209,7 +209,7 @@ export function FocusMapView() {
       coopHandlerRef.current(message);
     },
   });
-  const { coopState, handleServerMessage, sendChat, clearRoute } = useCoopSession({
+  const { coopState, handleServerMessage, sendChat, clearSharedPlan } = useCoopSession({
     wsRef,
     isConnected: isControlWsConnected,
     sessionId,
@@ -1379,7 +1379,7 @@ export function FocusMapView() {
                     edgeToEdge={isFocusMap}
                     waypoints={missionWaypoints}
                     route={missionRoute}
-                    sharedRoute={coopState.sharedRoute?.route || null}
+                    sharedPlan={coopState.sharedPlan}
                     alternativeRoutes={mapRouteAlternatives}
                     selectedAlternativeIndex={selectedRouteIndex}
                     highlightedAlternativeIndex={hoveredRouteIndex}
@@ -1729,7 +1729,7 @@ export function FocusMapView() {
           <CoopChatDock
             coopState={coopState}
             onSendChat={sendChat}
-            onClearRoute={clearRoute}
+            onClearRoute={clearSharedPlan}
           />
         </div>
       )}

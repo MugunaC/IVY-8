@@ -161,10 +161,16 @@
   body {
     @apply bg-background text-foreground antialiased;
     background-image: var(--app-background-image);
+    overflow-x: hidden;
+    scrollbar-color: auto;
+    scrollbar-width: auto;
   }
 
   html {
     font-size: var(--font-size);
+    overflow-x: hidden;
+    scrollbar-color: auto;
+    scrollbar-width: auto;
   }
 
   h1 {

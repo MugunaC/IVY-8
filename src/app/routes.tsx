@@ -18,6 +18,14 @@ const ControllerPage = lazy(async () => {
   const mod = await import('@/app/pages/ControllerPage');
   return { default: mod.ControllerPage };
 });
+const CoopPage = lazy(async () => {
+  const mod = await import('@/app/pages/CoopPage');
+  return { default: mod.CoopPage };
+});
+const CoopSessionPage = lazy(async () => {
+  const mod = await import('@/app/pages/CoopSessionPage');
+  return { default: mod.CoopSessionPage };
+});
 function OpsRedirect() {
   const location = useLocation();
   return <Navigate to={`/control${location.search}${location.hash}`} replace />;
@@ -89,6 +97,26 @@ export const router = createBrowserRouter([
       <RequireAuth>
         <Suspense fallback={<RouteFallback />}>
           <ControllerPage />
+        </Suspense>
+      </RequireAuth>
+    ),
+  },
+  {
+    path: '/coop',
+    element: (
+      <RequireAuth>
+        <Suspense fallback={<RouteFallback />}>
+          <CoopPage />
+        </Suspense>
+      </RequireAuth>
+    ),
+  },
+  {
+    path: '/coop/session/:sessionId',
+    element: (
+      <RequireAuth>
+        <Suspense fallback={<RouteFallback />}>
+          <CoopSessionPage />
         </Suspense>
       </RequireAuth>
     ),

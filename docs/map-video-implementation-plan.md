@@ -12,7 +12,9 @@
 - Dual-monitor launch actions are first-class:
   - Focus display window (`/control?vehicleId=...&focus=map`)
   - Video-focused window (`/control?vehicleId=...&focus=video`)
-  - Control mirror window (`/control?...vehicle context...`)
+  - Chat-focused window (`/control?vehicleId=...&focus=chat`)
+  - Controller-focused window (`/control?vehicleId=...&focus=control`)
+- When multiple control-capable tabs are open for the same vehicle, the focused visible tab becomes the single active control publisher. Only that tab emits gamepad-driven control/input traffic.
 
 ## Tooling + Execution Constraints
 - Current agent environment supports local inspection and implementation, but file writes may require elevated permissions when sandboxed read-only.

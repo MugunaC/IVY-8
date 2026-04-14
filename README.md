@@ -64,6 +64,8 @@ Key server env vars (all optional):
 - `DEVICE_AUTH_WINDOW_MS` (default `30000`)
 - `DEVICE_HEARTBEAT_TIMEOUT_MS` (default `5000`)
 - `DEVICE_HEARTBEAT_SCAN_MS` (default `1000`)
+- `CONTROL_RATE_LIMIT_PER_SEC` (default `30`)
+- `CONTROL_RATE_BURST` (default `2`)
 - `DEVICE_REGISTRY_JSON` (override registry)
 
 UI env files:
@@ -134,6 +136,12 @@ Control WS (`/ws/control`) accepts:
 - `hello`
 - `location_subscribe`
 - `input` / `control` / `camera_control`
+
+### Active Control Publisher
+When multiple IVY control or focus tabs are open for the same vehicle in the same browser session, the browser elects a single active control publisher per vehicle. The active, focused visible tab silently takes ownership and is the only tab that emits gamepad-driven `input`, `control`, and gamepad-triggered mission/mode actions. This is client-side arbitration only:
+- it does not change the JSON schema sent to the backend or device
+- it is intended to prevent duplicate 20 Hz manual control streams from sibling tabs
+- takeover is automatic on focus/visibility changes and on tab close/logout
 
 Telemetry WS (`/ws/telemetry`) accepts:
 - `hello`
@@ -286,9 +294,9 @@ Data lives in `server/data/`:
 - `db.json` is retained as a legacy sidecar
 - `telemetry.json` and `input.json` are retained legacy/high-volume sidecars pending deeper telemetry cleanup
 - `telemetry-archive/` contains archived telemetry snapshots
+- `coop_messages` are persisted in SQLite with a strict 10 MB cap; oldest rows are evicted first and the UI loads the latest 50 messages per session
 
 Telemetry limits:
-- `TELEMETRY_DB_MAX_BYTES` (default `20971520`)
 - `MAX_TELEMETRY` (default `50000`)
 
 ## Metrics & Health
@@ -306,8 +314,8 @@ npm run lint
 Current refactor verification:
 - `npm run build:ws`
 - `npm run typecheck`
-- `npm run test` -> 5 test files / 14 tests
-- `npm run lint` -> passes with remaining hook warnings in `FocusMapView.tsx`
+- `npm run test`
+- `npm run lint` -> use current output rather than this README for exact warning count
 
 Load tests:
 ```bash

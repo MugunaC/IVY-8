@@ -7,12 +7,18 @@
 
 ## Runtime Topology
 1. Operator opens IVY control page (`/control`).
-2. Control page emits telemetry and control messages over WebSocket to IVY backend.
+2. The active focused IVY control/focus tab for a vehicle emits telemetry and control messages over WebSocket to IVY backend.
 3. Backend validates session/auth and resolves active `vehicleId`.
 4. Vehicle adapter forwards canonical commands to RTOS transport (serial/UDP/TCP bridge).
 5. Pico W RTOS task receives commands, checks `vehicleId`/hash binding, and applies actuator output.
 6. RTOS publishes location/sensor/camera-status upstream to backend.
 7. Backend fans out updates to UI (`/control` and focus windows via `?focus=`).
+
+## Browser Control Arbitration
+- IVY can keep multiple control-capable tabs open for the same vehicle, but only one browser tab is allowed to publish gamepad-driven control at a time.
+- The focused visible tab becomes the active control publisher and takes over silently on focus/visibility changes.
+- This arbitration happens in the browser before messages are sent to the backend.
+- The control payload schema sent to the backend and device does not change as a result of this arbitration.
 
 ## Data Planes
 - `Control plane` (bidirectional, low-latency, critical):

@@ -15,6 +15,7 @@ export const STORAGE_KEYS = {
   deviceOnline: (vehicleId: string) => `ivy.deviceOnline:${vehicleId}`,
   gamepadConnected: (vehicleId: string) => `ivy.gamepadConnected:${vehicleId}`,
   controlWsConnected: (vehicleId: string) => `ivy.controlWsConnected:${vehicleId}`,
+  controlPublisher: (vehicleId: string) => `ivy.controlPublisher:${vehicleId}`,
   telemetryCount: (vehicleId: string) => `ivy.telemetryCount:${vehicleId}`,
   mapSearchRegion: (vehicleId: string) => `ivy.mapSearchRegion:${vehicleId}`,
 };

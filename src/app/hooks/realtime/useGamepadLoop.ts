@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { clientMessageSchema } from '@shared/protocol';
 import type { MissionPlan, TelemetryPayload } from '@shared/types';
 import { normalizeAxis, normalizeButton, hasStateChanged } from '@/app/components/realtime/control/controlMath';
+import { readJson, removeKey, STORAGE_KEYS, writeJson } from '@/app/data/storage';
 
 interface UseGamepadLoopOptions {
   vehicleId: string;
@@ -42,6 +43,13 @@ interface UseGamepadLoopOptions {
 
 const MANUAL_CONTROL_INTERVAL_MS = 50;
 const AUTO_HEARTBEAT_MS = 1000;
+const CONTROL_PUBLISHER_HEARTBEAT_MS = 150;
+const CONTROL_PUBLISHER_STALE_MS = 500;
+
+type ControlPublisherState = {
+  tabId: string;
+  ts: number;
+};
 
 export function useGamepadLoop(options: UseGamepadLoopOptions) {
   const {
@@ -84,6 +92,107 @@ export function useGamepadLoop(options: UseGamepadLoopOptions) {
   const animationFrameId = useRef<number>();
   const connectionRef = useRef(false);
   const lastManualControlSentRef = useRef(0);
+  const tabIdRef = useRef(
+    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : `tab-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+  );
+  const isActivePublisherRef = useRef(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const key = STORAGE_KEYS.controlPublisher(vehicleId);
+    const tabId = tabIdRef.current;
+    const channel =
+      typeof BroadcastChannel !== 'undefined'
+        ? new BroadcastChannel(`ivy-control-publisher:${vehicleId}`)
+        : null;
+
+    const readPublisher = () => readJson<ControlPublisherState | null>(key, null);
+    const shouldOwnPublisher = () => document.visibilityState === 'visible' && document.hasFocus();
+    const syncPublisherRef = () => {
+      const current = readPublisher();
+      const now = Date.now();
+      isActivePublisherRef.current = Boolean(
+        current && current.tabId === tabId && now - current.ts <= CONTROL_PUBLISHER_STALE_MS
+      );
+    };
+    const claimPublisher = () => {
+      const next = { tabId, ts: Date.now() };
+      writeJson(key, next);
+      channel?.postMessage(next);
+      isActivePublisherRef.current = true;
+    };
+    const releasePublisher = () => {
+      const current = readPublisher();
+      if (current?.tabId === tabId) {
+        removeKey(key);
+        channel?.postMessage({ tabId: '', ts: 0 });
+      }
+      isActivePublisherRef.current = false;
+    };
+    const updatePublisher = () => {
+      const now = Date.now();
+      const current = readPublisher();
+      const currentIsFresh = Boolean(current && now - current.ts <= CONTROL_PUBLISHER_STALE_MS);
+      if (shouldOwnPublisher()) {
+        if (!currentIsFresh || current?.tabId !== tabId) {
+          claimPublisher();
+          return;
+        }
+        writeJson(key, { tabId, ts: now });
+        channel?.postMessage({ tabId, ts: now });
+        isActivePublisherRef.current = true;
+        return;
+      }
+      if (current?.tabId === tabId) {
+        releasePublisher();
+        return;
+      }
+      syncPublisherRef();
+    };
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key !== key) return;
+      if (shouldOwnPublisher()) {
+        updatePublisher();
+        return;
+      }
+      syncPublisherRef();
+    };
+    const handleVisibilityChange = () => updatePublisher();
+    const handleFocus = () => updatePublisher();
+    const handleBlur = () => updatePublisher();
+    const handlePageHide = () => releasePublisher();
+    const handleChannel = () => {
+      if (shouldOwnPublisher()) {
+        updatePublisher();
+        return;
+      }
+      syncPublisherRef();
+    };
+
+    channel?.addEventListener('message', handleChannel);
+    window.addEventListener('storage', handleStorage);
+    window.addEventListener('focus', handleFocus);
+    window.addEventListener('blur', handleBlur);
+    window.addEventListener('pagehide', handlePageHide);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    updatePublisher();
+    const heartbeat = window.setInterval(updatePublisher, CONTROL_PUBLISHER_HEARTBEAT_MS);
+
+    return () => {
+      window.clearInterval(heartbeat);
+      releasePublisher();
+      channel?.removeEventListener('message', handleChannel);
+      channel?.close();
+      window.removeEventListener('storage', handleStorage);
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('blur', handleBlur);
+      window.removeEventListener('pagehide', handlePageHide);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [vehicleId]);
 
   useEffect(() => {
     const pollGamepad = () => {
@@ -138,8 +247,9 @@ export function useGamepadLoop(options: UseGamepadLoopOptions) {
 
       const inputBlocked = inputBlockedRef?.current ?? false;
       const stateChanged = hasStateChanged(lastPayloadRef.current, payload);
+      const canPublish = !inputBlocked && isActivePublisherRef.current;
 
-      if (!inputBlocked && stateChanged) {
+      if (canPublish && stateChanged) {
         const nextSeq = telemetryCountRef.current + 1;
         const payloadWithSeq: TelemetryPayload = { ...payload, seq: nextSeq };
         lastPayloadRef.current = payload;
@@ -160,7 +270,7 @@ export function useGamepadLoop(options: UseGamepadLoopOptions) {
       if (activeLeaseId && controlWsRef.current?.readyState === WebSocket.OPEN) {
         const activeMode = driveModeRef.current;
         if (activeMode === 'manual') {
-          if (!inputBlocked && (stateChanged || now - lastManualControlSentRef.current >= MANUAL_CONTROL_INTERVAL_MS)) {
+          if (canPublish && (stateChanged || now - lastManualControlSentRef.current >= MANUAL_CONTROL_INTERVAL_MS)) {
             lastManualControlSentRef.current = now;
             const message = clientMessageSchema.safeParse({
               type: 'control',
@@ -178,7 +288,7 @@ export function useGamepadLoop(options: UseGamepadLoopOptions) {
             }
           }
         } else {
-          if (!inputBlocked && now - lastAutoControlSentRef.current >= AUTO_HEARTBEAT_MS) {
+          if (canPublish && now - lastAutoControlSentRef.current >= AUTO_HEARTBEAT_MS) {
             lastAutoControlSentRef.current = now;
             const message = clientMessageSchema.safeParse({
               type: 'control',
@@ -200,7 +310,7 @@ export function useGamepadLoop(options: UseGamepadLoopOptions) {
         onLeaseMissing?.();
       }
 
-      if (modeRising) {
+      if (canPublish && modeRising) {
         if (driveModeRef.current === 'manual') {
           onRequestAutoMode();
         } else {
@@ -208,10 +318,10 @@ export function useGamepadLoop(options: UseGamepadLoopOptions) {
         }
       }
 
-      if (confirmRising && missionPromptRef.current === 'confirm' && pendingMissionRef.current) {
+      if (canPublish && confirmRising && missionPromptRef.current === 'confirm' && pendingMissionRef.current) {
         onConfirmMission(pendingMissionRef.current);
       }
-      if (confirmRising && missionPromptRef.current === 'select') {
+      if (canPublish && confirmRising && missionPromptRef.current === 'select') {
         const selected =
           (draftMissionRef.current && selectedMissionIdRef.current === draftMissionRef.current.id
             ? draftMissionRef.current
@@ -223,7 +333,7 @@ export function useGamepadLoop(options: UseGamepadLoopOptions) {
           setMissionPrompt('select');
         }
       }
-      if (cancelRising && missionPromptRef.current !== 'none') {
+      if (canPublish && cancelRising && missionPromptRef.current !== 'none') {
         onCancelMissionPrompt();
       }
 

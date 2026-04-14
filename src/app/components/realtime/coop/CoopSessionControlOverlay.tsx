@@ -44,7 +44,7 @@ export function CoopSessionControlOverlay(props: CoopSessionControlOverlayProps)
   } = props;
 
   return (
-    <OverlayModal open={open} title="Coop Controls" onClose={onClose} maxWidthClassName="max-w-lg">
+    <OverlayModal open={open} title="Coop" onClose={onClose} maxWidthClassName="max-w-lg">
       <div className="grid gap-3 text-sm">
         <div className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
           Vehicle: {coopVehicleId || 'none'}

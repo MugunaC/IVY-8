@@ -18,6 +18,15 @@ describe('protocol schemas', () => {
     expect(result.success).toBe(false);
   });
 
+  it('accepts clear chat client messages', () => {
+    const result = clientMessageSchema.safeParse({
+      type: 'coop_chat_clear',
+      sessionId: 'session-1',
+      userId: 'user-1',
+    });
+    expect(result.success).toBe(true);
+  });
+
   it('accepts server cpp messages', () => {
     const result = serverMessageSchema.safeParse({
       type: 'cpp',

@@ -59,6 +59,9 @@ interface CoopSessionServiceOptions {
   resolveHost: (participant: CoopParticipant) => boolean;
   createId: (prefix: string) => string;
   now: () => number;
+  loadMessages: (sessionId: string) => CoopChatMessage[];
+  saveMessage: (message: CoopChatMessage) => void;
+  clearMessages: (sessionId: string) => void;
 }
 
 export interface CoopBroadcast<TConnection> {
@@ -140,6 +143,7 @@ export class InMemoryCoopSessionService<TConnection> {
       text: trimmed,
       ts: now,
     };
+    this.options.saveMessage(message);
     session.messages = [...session.messages, message].slice(-50);
     const existing = session.participants.get(params.userId);
     session.participants.set(params.userId, {
@@ -203,6 +207,16 @@ export class InMemoryCoopSessionService<TConnection> {
     return this.buildBroadcast(sessionId);
   }
 
+  clearChat(sessionId: string, actorUserId: string) {
+    const session = this.getOrCreateSession(sessionId);
+    if (session.hostUserId && session.hostUserId !== actorUserId) {
+      return this.buildBroadcast(sessionId);
+    }
+    session.messages = [];
+    this.options.clearMessages(sessionId);
+    return this.buildBroadcast(sessionId);
+  }
+
   buildBroadcastsForVehicle(vehicleId: string) {
     const broadcasts: CoopBroadcast<TConnection>[] = [];
     this.sessionById.forEach((session, sessionId) => {
@@ -220,7 +234,7 @@ export class InMemoryCoopSessionService<TConnection> {
     const created: CoopSessionState<TConnection> = {
       participants: new Map(),
       sockets: new Set(),
-      messages: [],
+      messages: this.options.loadMessages(sessionId),
       sharedPlan: null,
       version: 0,
     };

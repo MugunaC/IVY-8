@@ -200,6 +200,11 @@ export const clientMessageSchema = z.union([
     text: z.string().min(1).max(500),
   }),
   z.object({
+    type: z.literal('coop_chat_clear'),
+    sessionId: z.string().min(1),
+    userId: z.string().min(1),
+  }),
+  z.object({
     type: z.literal('coop_plan_set'),
     sessionId: z.string().min(1),
     vehicleId: z.string().min(1).optional(),

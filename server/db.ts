@@ -11,6 +11,7 @@ import type {
   ActivityLog,
   ActivityLogPage,
   ActivityLogStats,
+  CoopChatMessage,
   MissionPlan,
   PaginatedResult,
   RecordEntry,
@@ -25,6 +26,8 @@ const DB_FILE = path.join(DB_DIR, 'ivy.db');
 const LEGACY_DATA_DIR = path.resolve(process.cwd(), '..', '5', 'server', 'data');
 const MIGRATION_META_KEY = 'json_migrated_v1';
 const ENABLE_LEGACY_MIGRATION = process.env.IVY_ENABLE_LEGACY_MIGRATION === '1';
+const COOP_CHAT_DB_LIMIT_BYTES = 10 * 1024 * 1024;
+const COOP_CHAT_SESSION_WINDOW = 50;
 
 function ensureDbDir() {
   mkdirSync(DB_DIR, { recursive: true });
@@ -173,6 +176,16 @@ export function openDb() {
       payload TEXT NOT NULL,
       bytes INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS coop_messages (
+      id TEXT PRIMARY KEY,
+      sessionId TEXT NOT NULL,
+      vehicleId TEXT,
+      authorId TEXT NOT NULL,
+      author TEXT NOT NULL,
+      text TEXT NOT NULL,
+      ts INTEGER NOT NULL,
+      bytes INTEGER NOT NULL
+    );
   `);
   ensureDbMigrations(db);
   return db;
@@ -191,6 +204,7 @@ function ensureDbMigrations(db: Db) {
   db.exec(`CREATE INDEX IF NOT EXISTS idx_telemetry_ts ON telemetry(ts);`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_telemetry_vehicle_ts ON telemetry(vehicleId, ts);`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_missions_vehicle_updated ON missions(vehicleId, updatedAt);`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_coop_messages_session_ts ON coop_messages(sessionId, ts, id);`);
 }
 
 function encodePolyline(coords: [number, number][], precision = 5) {
@@ -951,6 +965,88 @@ export function pruneTelemetryBefore(
     });
   }
   db.prepare('DELETE FROM telemetry WHERE ts < ?').run(cutoffTs);
+}
+
+function serializeCoopChatMessage(message: CoopChatMessage) {
+  const payload = {
+    id: message.id,
+    sessionId: message.sessionId,
+    vehicleId: message.vehicleId ?? null,
+    authorId: message.authorId,
+    author: message.author,
+    text: message.text,
+    ts: message.ts,
+  };
+  return {
+    ...payload,
+    bytes: Buffer.byteLength(JSON.stringify(payload), 'utf8'),
+  };
+}
+
+function deserializeCoopChatMessage(row: {
+  id: string;
+  sessionId: string;
+  vehicleId?: string | null;
+  authorId: string;
+  author: string;
+  text: string;
+  ts: number;
+}): CoopChatMessage {
+  return {
+    id: row.id,
+    sessionId: row.sessionId,
+    vehicleId: row.vehicleId ?? undefined,
+    authorId: row.authorId,
+    author: row.author,
+    text: row.text,
+    ts: row.ts,
+  };
+}
+
+export function appendCoopChatMessage(db: Db, message: CoopChatMessage) {
+  const insertStmt = db.prepare(
+    `INSERT INTO coop_messages (id, sessionId, vehicleId, authorId, author, text, ts, bytes)
+     VALUES (@id, @sessionId, @vehicleId, @authorId, @author, @text, @ts, @bytes)`
+  );
+  const totalStmt = db.prepare('SELECT coalesce(SUM(bytes), 0) as total FROM coop_messages');
+  const oldestStmt = db.prepare('SELECT id, bytes FROM coop_messages ORDER BY ts ASC, id ASC LIMIT 1');
+  const deleteStmt = db.prepare('DELETE FROM coop_messages WHERE id = ?');
+  const tx = db.transaction((entry: CoopChatMessage) => {
+    const stored = serializeCoopChatMessage(entry);
+    insertStmt.run(stored);
+    let total = (totalStmt.get() as { total: number }).total;
+    while (total > COOP_CHAT_DB_LIMIT_BYTES) {
+      const oldest = oldestStmt.get() as { id: string; bytes: number } | undefined;
+      if (!oldest) break;
+      deleteStmt.run(oldest.id);
+      total -= oldest.bytes;
+    }
+  });
+  tx(message);
+}
+
+export function listCoopChatMessages(db: Db, sessionId: string, limit = COOP_CHAT_SESSION_WINDOW) {
+  const cappedLimit = Math.max(1, Math.min(COOP_CHAT_SESSION_WINDOW, Math.floor(limit)));
+  const rows = db.prepare(
+    `SELECT id, sessionId, vehicleId, authorId, author, text, ts
+     FROM coop_messages
+     WHERE sessionId = ?
+     ORDER BY ts DESC, id DESC
+     LIMIT ?`
+  ).all(sessionId, cappedLimit) as Array<{
+    id: string;
+    sessionId: string;
+    vehicleId?: string | null;
+    authorId: string;
+    author: string;
+    text: string;
+    ts: number;
+  }>;
+  return rows.reverse().map(deserializeCoopChatMessage);
+}
+
+export function clearCoopChatMessages(db: Db, sessionId: string) {
+  db.prepare('DELETE FROM coop_messages WHERE sessionId = ?').run(sessionId);
 }
 
 export function newId(prefix: string) {

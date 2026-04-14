@@ -312,6 +312,7 @@ export type WsClientMessage =
     }
   | { type: 'coop_leave'; sessionId: string; userId: string }
   | { type: 'coop_chat'; sessionId: string; vehicleId?: string; userId: string; username: string; text: string }
+  | { type: 'coop_chat_clear'; sessionId: string; userId: string }
   | {
       type: 'coop_plan_set';
       sessionId: string;

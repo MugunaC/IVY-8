@@ -68,6 +68,7 @@ import {
   LogOut,
   Map as MapIcon,
   MapPin,
+  MessageSquare,
   Minimize2,
   Moon,
   Power,
@@ -117,7 +118,8 @@ export function ControllerPage() {
   const isFocusMap = focus === 'map';
   const isFocusVideo = focus === 'video';
   const isFocusControl = focus === 'control';
-  const isFocusedDisplay = isFocusMap || isFocusVideo || isFocusControl;
+  const isFocusChat = focus === 'chat';
+  const isFocusedDisplay = isFocusMap || isFocusVideo || isFocusControl || isFocusChat;
 
   const [gamepadState, setGamepadState] = useState<GamepadState>({
     buttons: Array(18).fill(0),
@@ -440,9 +442,9 @@ export function ControllerPage() {
     setModules({
       video: isFocusVideo,
       visualizer: isFocusControl,
-      stream: isFocusControl,
+      stream: isFocusChat,
     });
-  }, [isFocusedDisplay, isFocusMap, isFocusVideo, isFocusControl]);
+  }, [isFocusedDisplay, isFocusVideo, isFocusControl, isFocusChat]);
 
   const addTerminalLine = useCallback((line: string) => {
     terminalQueueRef.current.push(`[${new Date().toLocaleTimeString()}] ${line}`);
@@ -1167,43 +1169,34 @@ export function ControllerPage() {
     setModules((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
-  const openMapWindow = () => {
+  const openFocusedWindow = (nextFocus: 'map' | 'video' | 'control' | 'chat') => {
     const params = new URLSearchParams();
     params.set('vehicleId', vehicleId);
-    params.set('focus', 'map');
+    params.set('focus', nextFocus);
     if (sessionId) params.set('session', sessionId);
     const popup = window.open(
       `/control?${params.toString()}`,
       '_blank',
       'noopener,noreferrer'
     );
+    popup?.focus();
     registerSecondaryWindow(popup);
+  };
+
+  const openMapWindow = () => {
+    openFocusedWindow('map');
   };
 
   const openVideoWindow = () => {
-    const params = new URLSearchParams();
-    params.set('vehicleId', vehicleId);
-    params.set('focus', 'video');
-    if (sessionId) params.set('session', sessionId);
-    const popup = window.open(
-      `/control?${params.toString()}`,
-      '_blank',
-      'noopener,noreferrer'
-    );
-    registerSecondaryWindow(popup);
+    openFocusedWindow('video');
   };
 
   const openControlWindow = () => {
-    const params = new URLSearchParams();
-    params.set('vehicleId', vehicleId);
-    params.set('focus', 'control');
-    if (sessionId) params.set('session', sessionId);
-    const popup = window.open(
-      `/control?${params.toString()}`,
-      '_blank',
-      'noopener,noreferrer'
-    );
-    registerSecondaryWindow(popup);
+    openFocusedWindow('control');
+  };
+
+  const openChatWindow = () => {
+    openFocusedWindow('chat');
   };
 
   const handleLogout = () => {
@@ -1226,6 +1219,15 @@ export function ControllerPage() {
       userId: user.id,
       username: user.username,
       text,
+    });
+  };
+
+  const handleClearCoopMessages = () => {
+    if (!sessionId || !user?.id) return;
+    sendClientMessage({
+      type: 'coop_chat_clear',
+      sessionId,
+      userId: user.id,
     });
   };
 
@@ -1325,6 +1327,65 @@ export function ControllerPage() {
 
   if (isFocusMap) {
     return <FocusMapView />;
+  }
+
+  if (isFocusVideo) {
+    return (
+      <div className="min-h-screen bg-background p-4">
+        <Suspense fallback={<ControllerPanelFallback title="Video" />}>
+          <VideoPanel
+            signalingUrl={getDefaultSignalingUrl()}
+            roomId={roomId}
+            viewerId={viewerId}
+            className="h-[calc(100vh-2rem)]"
+            videoClassName="h-full min-h-0 flex-1"
+          />
+        </Suspense>
+      </div>
+    );
+  }
+
+  if (isFocusControl) {
+    return (
+      <div className="min-h-screen bg-background p-4">
+        <ControllerVisualizerPanel
+          inputPaused={inputPaused}
+          onToggleInputPaused={() => setInputPaused((prev) => !prev)}
+          visualizerRef={visualizerRef}
+          visualizerContainerRef={visualizerContainerRef}
+          visualizerHeight={visualizerHeight}
+          visualizerMaxHeight={visualizerMaxHeight}
+          onLoad={sendVisualizerMaxHeight}
+        />
+      </div>
+    );
+  }
+
+  if (isFocusChat) {
+    return (
+      <div className="min-h-screen bg-background p-4">
+        <ControllerChatPanel
+          sessionId={sessionId}
+          inviteUrl={inviteUrl}
+          inviteCopied={inviteCopied}
+          isCoopHost={isCoopHost}
+          participants={coopParticipants}
+          messages={coopState.messages}
+          terminalOutput={terminalOutput}
+          sharedPlan={coopState.sharedPlan}
+          currentUserId={user?.id}
+          coopVehicleId={vehicleId}
+          className="h-[calc(100vh-2rem)] max-h-none min-h-[calc(100vh-2rem)]"
+          onSendChat={handleSendCoopMessage}
+          onHostSession={handleStartCoopSession}
+          onJoinSession={handleJoinCoopSession}
+          onLeaveSession={handleLeaveCoopSession}
+          onCopyInvite={handleCopyInvite}
+          onClearRoute={handleClearSharedRoute}
+          onClearChat={handleClearCoopMessages}
+        />
+      </div>
+    );
   }
 
   return (
@@ -1740,8 +1801,8 @@ export function ControllerPage() {
                 size="icon"
                 variant="outline"
                 onClick={openMapWindow}
-                aria-label="Open map in new page"
-                title="Open map in new page"
+                aria-label="Open map"
+                title="Open map"
                 className="rounded-full border-emerald-400/80 bg-emerald-500/75 text-white hover:bg-emerald-500/90 dark:border-emerald-500/60 dark:bg-emerald-700/45 dark:hover:bg-emerald-700/60"
               >
                 <MapIcon className="size-4" />
@@ -1755,6 +1816,16 @@ export function ControllerPage() {
                 className="rounded-full border-emerald-400/80 bg-emerald-500/75 text-white hover:bg-emerald-500/90 dark:border-emerald-500/60 dark:bg-emerald-700/45 dark:hover:bg-emerald-700/60"
               >
                 <VideoIcon className="size-4" />
+              </Button>
+              <Button
+                size="icon"
+                variant="outline"
+                onClick={openChatWindow}
+                aria-label="Open chat in new page"
+                title="Open chat in new page"
+                className="rounded-full border-emerald-400/80 bg-emerald-500/75 text-white hover:bg-emerald-500/90 dark:border-emerald-500/60 dark:bg-emerald-700/45 dark:hover:bg-emerald-700/60"
+              >
+                <MessageSquare className="size-4" />
               </Button>
               <Button
                 size="icon"
@@ -1807,7 +1878,7 @@ export function ControllerPage() {
                   title="Show chat"
                   className="rounded-full"
                 >
-                  <Terminal className="size-4" />
+                  <MessageSquare className="size-4" />
                 </Button>
               )}
             </div>
@@ -1914,6 +1985,7 @@ export function ControllerPage() {
                           onLeaveSession={handleLeaveCoopSession}
                           onCopyInvite={handleCopyInvite}
                           onClearRoute={handleClearSharedRoute}
+                          onClearChat={handleClearCoopMessages}
                         />
                       )}
                     </div>
@@ -2050,6 +2122,7 @@ export function ControllerPage() {
               onLeaveSession={handleLeaveCoopSession}
               onCopyInvite={handleCopyInvite}
               onClearRoute={handleClearSharedRoute}
+              onClearChat={handleClearCoopMessages}
             />
           </TabsContent>
           )}

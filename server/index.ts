@@ -26,7 +26,10 @@ import {
   listVehicles,
   getVehicle as dbGetVehicle,
   appendTelemetry,
+  appendCoopChatMessage,
+  clearCoopChatMessages,
   listTelemetry,
+  listCoopChatMessages,
   pruneTelemetry,
   pruneTelemetryBefore,
   newId,
@@ -279,6 +282,7 @@ type ParsedIncomingMessage =
     }
   | { kind: 'coop_leave'; sessionId: string; userId: string }
   | { kind: 'coop_chat'; sessionId: string; vehicleId?: string; userId: string; username: string; text: string }
+  | { kind: 'coop_chat_clear'; sessionId: string; userId: string }
   | {
       kind: 'coop_plan_set';
       sessionId: string;
@@ -453,6 +457,14 @@ function parseIncoming(message: RawData, fallbackVehicleId?: string): ParsedInco
       userId: result.data.userId,
       username: result.data.username,
       text: result.data.text,
+    };
+  }
+
+  if (result.data.type === 'coop_chat_clear') {
+    return {
+      kind: 'coop_chat_clear',
+      sessionId: result.data.sessionId,
+      userId: result.data.userId,
     };
   }
 
@@ -703,6 +715,9 @@ const coopSessions = new InMemoryCoopSessionService<WebSocket>({
   },
   createId: newId,
   now: () => Date.now(),
+  loadMessages: (sessionId) => listCoopChatMessages(db, sessionId, 50),
+  saveMessage: (message) => appendCoopChatMessage(db, message),
+  clearMessages: (sessionId) => clearCoopChatMessages(db, sessionId),
 });
 
 function broadcastCoopState(broadcast: CoopBroadcast<WebSocket> | null) {
@@ -1309,6 +1324,12 @@ if (START_WS && wssControl) {
           });
           broadcastCoopState(broadcast);
         }
+        return;
+      }
+
+      if (parsed.kind === 'coop_chat_clear') {
+        const actor = coopSessions.getMeta(ws);
+        broadcastCoopState(coopSessions.clearChat(parsed.sessionId, actor?.userId || parsed.userId));
         return;
       }
 

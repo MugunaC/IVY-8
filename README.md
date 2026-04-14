@@ -102,6 +102,13 @@ One command:
 npm run dev:remote:one
 ```
 
+Termux / Android:
+```bash
+npm run dev:remote:one:termux
+```
+
+This keeps the backend, Vite client, gateway, and `cloudflared` in one shell using background jobs instead of opening new terminals. Press `Ctrl+C` once to stop all of them.
+
 Manual equivalent:
 ```bash
 npm run dev:server

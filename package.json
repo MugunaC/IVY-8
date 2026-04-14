@@ -13,6 +13,7 @@
     "dev:gateway": "npm run build:ws && node dist-server/server/gateway.js",
     "dev:gateway:proxy": "set GATEWAY_PROXY_UI=1&& npm run dev:gateway",
     "dev:remote:one": "powershell -ExecutionPolicy Bypass -File .\\scripts\\remote-one.ps1",
+    "dev:remote:one:termux": "bash ./scripts/remote-one.sh",
     "build": "vite build",
     "build:ws": "tsc -p tsconfig.server.json",
     "preview": "vite preview",

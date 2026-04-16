@@ -5,7 +5,6 @@ import { Label } from '@/app/components/ui/label';
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from '@/app/components/ui/card';
@@ -232,9 +231,6 @@ export function VehiclesTab() {
         <div className="flex items-center justify-between">
           <div>
             <CardTitle>Vehicle Management</CardTitle>
-            <CardDescription>
-              Manage fleet vehicles and assignments
-            </CardDescription>
           </div>
           <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
             <DialogTrigger asChild>

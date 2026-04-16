@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { useAuth } from '@/app/context/AuthContext';
 import { useTheme } from '@/app/context/ThemeContext';
+import { AppShellHeader } from '@/app/components/layout/AppShellHeader';
 import { Button } from '@/app/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Badge } from '@/app/components/ui/badge';
@@ -14,7 +15,7 @@ import {
   setLastVehicleSelection,
 } from '@/app/data/settingsRepo';
 import type { Vehicle } from '@shared/types';
-import { LogOut, Car, MapPin, Battery, CheckCircle2, Moon, Sun, Users } from 'lucide-react';
+import { LogOut, Car, MapPin, Battery, CheckCircle2, Moon, Sun } from 'lucide-react';
 
 export function UserPage() {
   const { user, logout } = useAuth();
@@ -91,29 +92,30 @@ export function UserPage() {
     if (!selectedVehicle || !user) return;
 
     const vehicle = vehicles.find((v) => v.id === selectedVehicle);
-    const updatedAll = await releaseVehicle(selectedVehicle);
-
-    const timestamp = new Date().toISOString();
-    void appendLog({
-      id: `log-${Date.now()}`,
-      userId: user.id,
-      username: user.username,
-      action: 'vehicle_unselected',
-      details: `Unselected vehicle ${vehicle?.model} (${selectedVehicle})`,
-      timestamp,
-    });
-    void enqueueRecord({
-      ts: Date.now(),
-      userId: user.id,
-      username: user.username,
-      vehicleId: selectedVehicle,
-      action: 'vehicle_unselected',
-      details: `Unselected vehicle ${vehicle?.model} (${selectedVehicle})`,
-    });
-
-    setVehicles(updatedAll.filter((v) => v.assignedUsers.includes(user.id)));
-    setSelectedVehicle(null);
-    clearLastVehicleSelection(user.id);
+    try {
+      const updatedAll = await releaseVehicle(selectedVehicle);
+      const timestamp = new Date().toISOString();
+      void appendLog({
+        id: `log-${Date.now()}`,
+        userId: user.id,
+        username: user.username,
+        action: 'vehicle_unselected',
+        details: `Unselected vehicle ${vehicle?.model} (${selectedVehicle})`,
+        timestamp,
+      });
+      void enqueueRecord({
+        ts: Date.now(),
+        userId: user.id,
+        username: user.username,
+        vehicleId: selectedVehicle,
+        action: 'vehicle_unselected',
+        details: `Unselected vehicle ${vehicle?.model} (${selectedVehicle})`,
+      });
+      setVehicles(updatedAll.filter((v) => v.assignedUsers.includes(user.id)));
+    } finally {
+      setSelectedVehicle(null);
+      clearLastVehicleSelection(user.id);
+    }
   };
 
   const handleLogout = () => {
@@ -130,17 +132,11 @@ export function UserPage() {
 
   return (
     <div className="app-shell min-h-screen">
-      <header className="app-header-shell">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold">IVY</h1>
-            <p className="text-sm text-[color:var(--app-header-muted)]">Welcome, {user?.username}</p>
-          </div>
-          <div className="flex gap-2">
-            <Button onClick={() => navigate('/control')} variant="outline" className="app-header-action">
-              <Users className="mr-2 size-4" />
-              Coop
-            </Button>
+      <AppShellHeader
+        title="IVY"
+        subtitle={`Welcome, ${user?.username ?? ''}`}
+        actions={
+          <>
             <Button onClick={toggleTheme} variant="outline" size="icon" className="app-header-action">
               {theme === 'light' ? <Moon className="size-4" /> : <Sun className="size-4" />}
             </Button>
@@ -148,9 +144,9 @@ export function UserPage() {
               <LogOut className="size-4 mr-2" />
               Logout
             </Button>
-          </div>
-        </div>
-      </header>
+          </>
+        }
+      />
 
       <main className="container mx-auto px-4 py-6 max-w-6xl">
         <section className="app-hero relative overflow-hidden mb-6 p-6">
@@ -295,15 +291,6 @@ export function UserPage() {
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      const vehicle = vehicles.find((v) => v.id === selectedVehicle);
-                      navigate('/control', { state: { vehicle } });
-                    }}
-                  >
-                    Coop
-                  </Button>
                   <Button variant="outline" onClick={() => void handleUnselectVehicle()}>
                     End Session
                   </Button>

@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react';
 import { createBrowserRouter, Navigate, useLocation, useParams } from 'react-router';
 import { useAuth } from '@/app/context/AuthContext';
+import { getHomeRoute } from '@/app/utils/navigation';
 
 const LoginPage = lazy(async () => {
   const mod = await import('@/app/pages/LoginPage');
@@ -64,7 +65,7 @@ function RequireRole({ role, children }: { role: 'admin' | 'user'; children: JSX
     return <Navigate to={`/?redirect=${encodeURIComponent(redirect)}`} replace />;
   }
   if (user.role !== role) {
-    return <Navigate to="/user" replace />;
+    return <Navigate to={getHomeRoute(user.role)} replace />;
   }
   return children;
 }
@@ -91,11 +92,11 @@ export const router = createBrowserRouter([
   {
     path: '/user',
     element: (
-      <RequireAuth>
+      <RequireRole role="user">
         <Suspense fallback={<RouteFallback />}>
           <UserPage />
         </Suspense>
-      </RequireAuth>
+      </RequireRole>
     ),
   },
   {

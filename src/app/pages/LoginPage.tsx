@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { useAuth } from '@/app/context/AuthContext';
 import { useTheme } from '@/app/context/ThemeContext';
+import { getHomeRoute } from '@/app/utils/navigation';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import { Label } from '@/app/components/ui/label';
@@ -53,8 +54,9 @@ export function LoginPage() {
         const canUseRedirect =
           redirectParam.startsWith('/') &&
           !redirectParam.startsWith('//') &&
-          !redirectParam.startsWith('/\\');
-        navigate(canUseRedirect ? redirectParam : user.role === 'admin' ? '/admin' : '/user');
+          !redirectParam.startsWith('/\\') &&
+          !(user.role === 'admin' && redirectParam === '/user');
+        navigate(canUseRedirect ? redirectParam : getHomeRoute(user.role));
       } else {
         setError('Invalid credentials');
       }

@@ -58,6 +58,7 @@ import {
   getWsUrlOverride,
   setWsUrlOverride,
 } from '@/app/data/settingsRepo';
+import { getHomeRoute } from '@/app/utils/navigation';
 import { clientMessageSchema } from '@shared/protocol';
 import type { CoopStatePayload, MissionPlan, TelemetryPayload } from '@shared/types';
 import {
@@ -804,8 +805,10 @@ export function ControllerPage() {
   }, [missionPrompt, resolveSelectedMission, selectedMissionId]);
 
   useEffect(() => {
-    if (!vehicle) navigate('/user');
-  }, [vehicle, navigate]);
+    if (!vehicle) {
+      navigate(getHomeRoute(user?.role), { replace: true });
+    }
+  }, [vehicle, navigate, user?.role]);
 
   useEffect(() => {
     if (controlLeaseId) {
@@ -1298,31 +1301,33 @@ export function ControllerPage() {
 
   const handleEndSession = async () => {
     if (!vehicle || !user) {
-      navigate('/user');
+      navigate(getHomeRoute(user?.role), { replace: true });
       return;
     }
 
-    await releaseVehicle(vehicle.id);
-    const timestamp = new Date().toISOString();
-    void appendLog({
-      id: `log-${Date.now()}`,
-      userId: user.id,
-      username: user.username,
-      action: 'vehicle_unselected',
-      details: `Ended session with vehicle ${vehicle.model} (${vehicle.id})`,
-      timestamp,
-    });
-    void enqueueRecord({
-      ts: Date.now(),
-      userId: user.id,
-      username: user.username,
-      vehicleId: vehicle.id,
-      action: 'vehicle_unselected',
-      details: `Ended session with vehicle ${vehicle.model} (${vehicle.id})`,
-    });
-
-    clearLastVehicleSelection(user.id);
-    navigate('/user');
+    try {
+      await releaseVehicle(vehicle.id);
+      const timestamp = new Date().toISOString();
+      void appendLog({
+        id: `log-${Date.now()}`,
+        userId: user.id,
+        username: user.username,
+        action: 'vehicle_unselected',
+        details: `Ended session with vehicle ${vehicle.model} (${vehicle.id})`,
+        timestamp,
+      });
+      void enqueueRecord({
+        ts: Date.now(),
+        userId: user.id,
+        username: user.username,
+        vehicleId: vehicle.id,
+        action: 'vehicle_unselected',
+        details: `Ended session with vehicle ${vehicle.model} (${vehicle.id})`,
+      });
+    } finally {
+      clearLastVehicleSelection(user.id);
+      navigate(getHomeRoute(user.role), { replace: true });
+    }
   };
 
   if (isFocusMap) {

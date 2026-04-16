@@ -3,7 +3,6 @@ import { Button } from '@/app/components/ui/button';
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from '@/app/components/ui/card';
@@ -107,29 +106,44 @@ export function LogsTab() {
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <CardTitle>Activity Logs</CardTitle>
-            <CardDescription>
-              View all user activity and system events
-            </CardDescription>
           </div>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => void loadLogs()}>
-              <RefreshCw className="size-4 mr-2" />
-              Refresh
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => void handleClearLogs()}>
-              <Trash2 className="size-4 mr-2" />
-              Clear Logs
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="icon"
+              className="sm:h-8 sm:w-auto sm:px-3"
+              onClick={() => void loadLogs()}
+              aria-label="Refresh logs"
+              title="Refresh logs"
+            >
+              <RefreshCw className="size-4" />
+              <span className="hidden sm:inline">Refresh</span>
             </Button>
             <Button
               variant="outline"
-              size="sm"
+              size="icon"
+              className="sm:h-8 sm:w-auto sm:px-3"
+              onClick={() => void handleClearLogs()}
+              aria-label="Clear logs"
+              title="Clear logs"
+            >
+              <Trash2 className="size-4" />
+              <span className="hidden sm:inline">Clear Logs</span>
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              className="sm:h-8 sm:w-auto sm:px-3"
               onClick={() => setShowSettings((prev) => !prev)}
               aria-pressed={showSettings}
+              aria-label="Log settings"
+              title="Log settings"
             >
               <Settings className="size-4" />
+              <span className="hidden sm:inline">Settings</span>
             </Button>
           </div>
         </div>
@@ -137,26 +151,26 @@ export function LogsTab() {
       <CardContent>
         <div className="space-y-4">
           {showSettings && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <div className="app-panel-muted group p-4 transition-all duration-200 hover:border-border/90">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+              <div className="app-panel-muted p-4">
                 <div className="flex items-center gap-2">
                   <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-border/70 bg-background/65">
                     <Filter className="size-4 text-muted-foreground" />
                   </span>
-                  <span className="sr-only">Filters</span>
+                  <span className="text-sm font-medium">Filters</span>
                 </div>
-              <div className="mt-3 grid grid-cols-1 gap-3 overflow-hidden max-h-0 group-hover:max-h-[220px] transition-all duration-300">
-                <div className="space-y-2">
-                  <div className="text-xs text-muted-foreground">Search</div>
-                  <Input
-                    value={query}
-                    onChange={(event) => setQuery(event.target.value)}
-                    placeholder="Search user, action, or details"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <div className="text-xs text-muted-foreground">Filter by Action</div>
-                  <Select value={filterAction} onValueChange={setFilterAction}>
+                <div className="mt-3 grid grid-cols-1 gap-3">
+                  <div className="space-y-2">
+                    <div className="text-xs text-muted-foreground">Search</div>
+                    <Input
+                      value={query}
+                      onChange={(event) => setQuery(event.target.value)}
+                      placeholder="Search user, action, or details"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <div className="text-xs text-muted-foreground">Filter by Action</div>
+                    <Select value={filterAction} onValueChange={setFilterAction}>
                       <SelectTrigger className="w-full">
                         <SelectValue />
                       </SelectTrigger>
@@ -175,8 +189,8 @@ export function LogsTab() {
             </div>
           )}
 
-          <div>
-            <Table>
+          <div className="min-w-0">
+            <Table className="min-w-[920px]">
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-14">No.</TableHead>
@@ -211,10 +225,10 @@ export function LogsTab() {
                       </TableCell>
                       <TableCell className="font-medium">{log.username}</TableCell>
                       <TableCell>{getActionBadge(log.action)}</TableCell>
-                      <TableCell className="text-sm max-w-md truncate">
+                      <TableCell className="max-w-md truncate text-sm">
                         {log.details || '-'}
                       </TableCell>
-                      <TableCell className="text-sm whitespace-nowrap">
+                      <TableCell className="whitespace-nowrap text-sm">
                         {new Date(log.timestamp).toLocaleString()}
                       </TableCell>
                     </TableRow>
@@ -248,7 +262,7 @@ export function LogsTab() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t">
+          <div className="grid grid-cols-2 gap-4 border-t pt-4 md:grid-cols-4">
             <div className="app-panel-muted p-4">
               <div className="text-sm font-medium text-emerald-700 dark:text-emerald-300">Logins</div>
               <div className="text-2xl font-bold text-emerald-700 dark:text-emerald-300">
@@ -283,4 +297,3 @@ export function LogsTab() {
     </Card>
   );
 }
-

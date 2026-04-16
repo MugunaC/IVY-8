@@ -5,7 +5,6 @@ import { Label } from '@/app/components/ui/label';
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from '@/app/components/ui/card';
@@ -158,9 +157,6 @@ export function UsersTab() {
         <div className="flex items-center justify-between">
           <div>
             <CardTitle>User Management</CardTitle>
-            <CardDescription>
-              View and manage all system users
-            </CardDescription>
           </div>
           <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
             <DialogTrigger asChild>

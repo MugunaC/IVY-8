@@ -154,45 +154,63 @@ export function TelemetryTab() {
   return (
     <Card>
       <CardHeader>
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0">
             <CardTitle className="flex items-center gap-2">
               <Database className="size-5" />
               Input
             </CardTitle>
-            <CardDescription>{filterSummary}</CardDescription>
+            <CardDescription className="truncate">{filterSummary}</CardDescription>
           </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex flex-wrap gap-2">
-              <Button variant="outline" size="sm" onClick={() => void loadTelemetry()} disabled={loading}>
-                <RefreshCw className="size-4 mr-2" />
-                Refresh
-              </Button>
-              <Button variant="outline" size="sm" onClick={handleExport}>
-                <Download className="size-4 mr-2" />
-                Export CSV
-              </Button>
-            </div>
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               variant="outline"
-              size="sm"
+              size="icon"
+              className="sm:h-8 sm:w-auto sm:px-3"
+              onClick={() => void loadTelemetry()}
+              disabled={loading}
+              aria-label="Refresh input"
+              title="Refresh input"
+            >
+              <RefreshCw className="size-4" />
+              <span className="hidden sm:inline">Refresh</span>
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              className="sm:h-8 sm:w-auto sm:px-3"
+              onClick={handleExport}
+              aria-label="Export input as CSV"
+              title="Export input as CSV"
+            >
+              <Download className="size-4" />
+              <span className="hidden sm:inline">Export CSV</span>
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              className="sm:h-8 sm:w-auto sm:px-3"
               onClick={() => setShowSettings((prev) => !prev)}
               aria-pressed={showSettings}
+              aria-label="Input settings"
+              title="Input settings"
             >
               <Settings className="size-4" />
+              <span className="hidden sm:inline">Settings</span>
             </Button>
           </div>
         </div>
+
         {showSettings && (
-          <div className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div className="app-panel-muted group p-4 transition-all duration-200 hover:border-border/90">
+          <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <div className="app-panel-muted p-4">
               <div className="flex items-center gap-2">
                 <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-border/70 bg-background/65">
                   <Filter className="size-4 text-muted-foreground" />
                 </span>
-                <span className="sr-only">Filters</span>
+                <span className="text-sm font-medium">Filters</span>
               </div>
-              <div className="mt-3 grid grid-cols-1 gap-3 overflow-hidden max-h-0 group-hover:max-h-[420px] transition-all duration-300">
+              <div className="mt-3 grid grid-cols-1 gap-3">
                 <div className="space-y-2">
                   <div className="text-xs text-muted-foreground">Filter by User</div>
                   <select
@@ -250,14 +268,14 @@ export function TelemetryTab() {
               </div>
             </div>
 
-            <div className="app-panel-muted group p-4 transition-all duration-200 hover:border-border/90">
+            <div className="app-panel-muted p-4">
               <div className="flex items-center gap-2">
                 <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-border/70 bg-background/65">
                   <Database className="size-4 text-muted-foreground" />
                 </span>
-                <span className="sr-only">Storage</span>
+                <span className="text-sm font-medium">Stored Samples</span>
               </div>
-              <div className="mt-3 grid grid-cols-1 gap-3 overflow-hidden max-h-0 group-hover:max-h-[240px] transition-all duration-300">
+              <div className="mt-3 grid grid-cols-1 gap-3">
                 <div className="app-panel-muted p-3">
                   <div className="text-xs text-muted-foreground">Stored Samples</div>
                   <div className="text-xl font-semibold">{stats.count}</div>
@@ -286,8 +304,8 @@ export function TelemetryTab() {
           </div>
         )}
 
-        <div className="mt-4">
-          <Table>
+        <div className="mt-4 min-w-0">
+          <Table className="min-w-[980px]">
             <TableHeader>
               <TableRow>
                 <TableHead className="w-14">No.</TableHead>
@@ -302,7 +320,7 @@ export function TelemetryTab() {
             <TableBody>
               {entries.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
+                  <TableCell colSpan={7} className="py-12 text-center text-muted-foreground">
                     No input records found
                   </TableCell>
                 </TableRow>
@@ -310,7 +328,7 @@ export function TelemetryTab() {
                 entries.map((entry, index) => (
                   <TableRow key={entry.id || entry.ts}>
                     <TableCell className="text-xs text-muted-foreground">{index + 1}</TableCell>
-                    <TableCell className="text-xs whitespace-nowrap">
+                    <TableCell className="whitespace-nowrap text-xs">
                       {new Date(entry.ts).toLocaleString()}
                     </TableCell>
                     <TableCell className="text-xs">
@@ -319,13 +337,13 @@ export function TelemetryTab() {
                     <TableCell className="text-xs">
                       {entry.vehicleId || '-'}
                     </TableCell>
-                    <TableCell className="text-xs font-mono">
+                    <TableCell className="font-mono text-xs">
                       {entry.payload.leaseId ? `${entry.payload.leaseId.slice(0, 8)}...` : '-'}
                     </TableCell>
-                    <TableCell className="text-xs max-w-xs truncate">
+                    <TableCell className="max-w-xs truncate text-xs">
                       {entry.payload.buttons.map((value) => value.toFixed(2)).join(', ')}
                     </TableCell>
-                    <TableCell className="text-xs max-w-xs truncate">
+                    <TableCell className="max-w-xs truncate text-xs">
                       {entry.payload.axes.map((value) => value.toFixed(2)).join(', ')}
                     </TableCell>
                   </TableRow>
@@ -343,4 +361,3 @@ export function TelemetryTab() {
     </Card>
   );
 }
-

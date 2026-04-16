@@ -5,7 +5,6 @@ import { Label } from '@/app/components/ui/label';
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from '@/app/components/ui/card';
@@ -170,9 +169,6 @@ export function SearchTab() {
     <Card>
       <CardHeader>
         <CardTitle>Database Search</CardTitle>
-        <CardDescription>
-          Search across users, vehicles, and logs using any criteria
-        </CardDescription>
       </CardHeader>
       <CardContent>
         <div className="space-y-4">

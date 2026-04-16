@@ -41,7 +41,7 @@ import { useGamepadLoop } from '@/app/hooks/realtime/useGamepadLoop';
 import { useTelemetrySocket } from '@/app/hooks/realtime/useTelemetrySocket';
 import { enqueueRecord, enqueueTelemetry } from '@/app/data/inputStore';
 import { getMissions } from '@/app/data/missionsRepo';
-import { readJson, readString, STORAGE_KEYS } from '@/app/data/storage';
+import { readJson, readString, STORAGE_KEYS, writeJson } from '@/app/data/storage';
 import { registerSecondaryWindow } from '@/app/utils/secondaryWindows';
 import { isPerfEnabled } from '@/app/utils/perf';
 import {
@@ -105,6 +105,11 @@ interface VehicleState {
   location: string;
   charge: number;
   controlLeaseId?: string;
+}
+
+interface ControllerLayoutState {
+  modules: ModulesState;
+  activeMainTab: 'ops' | 'status' | 'stream';
 }
 
 export function ControllerPage() {
@@ -237,6 +242,32 @@ export function ControllerPage() {
   const [wsUrlInput, setWsUrlInput] = useState(() => resolveWsUrl());
   const telemetryWsUrl = useMemo(() => getDefaultTelemetryWsUrl(wsUrl), [wsUrl]);
 
+  const buildControlSearch = useCallback(
+    (
+      nextVehicle: VehicleState | null | undefined,
+      options?: {
+        focus?: 'map' | 'video' | 'control' | 'chat';
+        sessionId?: string;
+        spectator?: boolean;
+      }
+    ) => {
+      const params = new URLSearchParams();
+      if (nextVehicle?.id) {
+        params.set('vehicleId', nextVehicle.id);
+        params.set('vehicleModel', nextVehicle.model);
+        params.set('vehicleLocation', nextVehicle.location);
+        params.set('vehicleCharge', String(nextVehicle.charge));
+      }
+      if (options?.focus) params.set('focus', options.focus);
+      if (options?.sessionId) params.set('session', options.sessionId);
+      if (options?.spectator) {
+        params.set('spectator', '1');
+      }
+      return params.toString() ? `?${params.toString()}` : '';
+    },
+    []
+  );
+
 
   const queryVehicle = useMemo<VehicleState | null>(() => {
     const params = new URLSearchParams(location.search);
@@ -315,6 +346,36 @@ export function ControllerPage() {
     typeof window !== 'undefined' && coopState.invitePath
       ? `${window.location.origin}${coopState.invitePath}`
       : '';
+  const layoutKey = useMemo(
+    () => (user?.id && vehicle?.id ? STORAGE_KEYS.controlLayout(user.id, vehicle.id) : null),
+    [user?.id, vehicle?.id]
+  );
+
+  useEffect(() => {
+    if (!vehicle || isFocusedDisplay) return;
+    const expectedSearch = buildControlSearch(vehicle, {
+      sessionId,
+      spectator: isSpectatorSession,
+    });
+    if (expectedSearch && location.search !== expectedSearch) {
+      navigate(
+        {
+          pathname: location.pathname,
+          search: expectedSearch,
+        },
+        { replace: true }
+      );
+    }
+  }, [
+    buildControlSearch,
+    isFocusedDisplay,
+    isSpectatorSession,
+    location.pathname,
+    location.search,
+    navigate,
+    sessionId,
+    vehicle,
+  ]);
 
   const { wsRef: controlSocketRef, isConnected: isControlWsConnected } = useControlSocket({
     url: wsUrl,
@@ -446,6 +507,26 @@ export function ControllerPage() {
       stream: isFocusChat,
     });
   }, [isFocusedDisplay, isFocusVideo, isFocusControl, isFocusChat]);
+
+  useEffect(() => {
+    if (!layoutKey || isFocusedDisplay) return;
+    const stored = readJson<ControllerLayoutState | null>(layoutKey, null);
+    if (!stored) return;
+    if (stored.activeMainTab) {
+      setActiveMainTab(stored.activeMainTab);
+    }
+    if (stored.modules) {
+      setModules(stored.modules);
+    }
+  }, [isFocusedDisplay, layoutKey]);
+
+  useEffect(() => {
+    if (!layoutKey || isFocusedDisplay) return;
+    writeJson<ControllerLayoutState>(layoutKey, {
+      modules,
+      activeMainTab,
+    });
+  }, [activeMainTab, isFocusedDisplay, layoutKey, modules]);
 
   const addTerminalLine = useCallback((line: string) => {
     terminalQueueRef.current.push(`[${new Date().toLocaleTimeString()}] ${line}`);
@@ -1173,12 +1254,12 @@ export function ControllerPage() {
   };
 
   const openFocusedWindow = (nextFocus: 'map' | 'video' | 'control' | 'chat') => {
-    const params = new URLSearchParams();
-    params.set('vehicleId', vehicleId);
-    params.set('focus', nextFocus);
-    if (sessionId) params.set('session', sessionId);
     const popup = window.open(
-      `/control?${params.toString()}`,
+      `/control${buildControlSearch(vehicle, {
+        focus: nextFocus,
+        sessionId,
+        spectator: isSpectatorSession,
+      })}`,
       '_blank',
       'noopener,noreferrer'
     );
@@ -1245,9 +1326,12 @@ export function ControllerPage() {
     navigate(
       {
         pathname: location.pathname,
-        search: params.toString() ? `?${params.toString()}` : '',
+        search: buildControlSearch(vehicle, {
+          sessionId: params.get('session') || '',
+          spectator: false,
+        }),
       },
-      { replace: false, state: location.state }
+      { replace: false }
     );
   };
 
@@ -1264,9 +1348,12 @@ export function ControllerPage() {
     navigate(
       {
         pathname: location.pathname,
-        search: params.toString() ? `?${params.toString()}` : '',
+        search: buildControlSearch(vehicle, {
+          sessionId: trimmedSessionId,
+          spectator: asSpectator,
+        }),
       },
-      { replace: false, state: location.state }
+      { replace: false }
     );
   };
 
@@ -1277,9 +1364,9 @@ export function ControllerPage() {
     navigate(
       {
         pathname: location.pathname,
-        search: params.toString() ? `?${params.toString()}` : '',
+        search: buildControlSearch(vehicle),
       },
-      { replace: false, state: location.state }
+      { replace: false }
     );
   };
 

@@ -126,7 +126,14 @@ export function UserPage() {
   const handleProceed = () => {
     if (selectedVehicle) {
       const vehicle = vehicles.find((v) => v.id === selectedVehicle);
-      navigate('/control', { state: { vehicle } });
+      if (!vehicle) return;
+      const params = new URLSearchParams({
+        vehicleId: vehicle.id,
+        vehicleModel: vehicle.model,
+        vehicleLocation: vehicle.location,
+        vehicleCharge: String(vehicle.charge),
+      });
+      navigate(`/control?${params.toString()}`);
     }
   };
 

@@ -18,6 +18,7 @@ export const STORAGE_KEYS = {
   controlPublisher: (vehicleId: string) => `ivy.controlPublisher:${vehicleId}`,
   telemetryCount: (vehicleId: string) => `ivy.telemetryCount:${vehicleId}`,
   mapSearchRegion: (vehicleId: string) => `ivy.mapSearchRegion:${vehicleId}`,
+  controlLayout: (userId: string, vehicleId: string) => `ivy.controlLayout:${userId}:${vehicleId}`,
 };
 
 const STORAGE_PREFIX = 'ivy.';
